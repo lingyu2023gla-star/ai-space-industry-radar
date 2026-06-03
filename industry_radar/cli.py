@@ -30,6 +30,7 @@ from .fetcher import fetch_and_import
 from .llm_client import call_deepseek_chat
 from .pipeline import run_pipeline
 from .report import DEFAULT_REPORT_PATH, write_report
+from .run_logger import list_run_logs, read_run_log
 from .storage import append_item, filter_items, read_items, sort_by_date_desc, write_items
 
 
@@ -327,6 +328,8 @@ def pipeline_command(args: argparse.Namespace) -> int:
             overwrite=pipeline_config["overwrite"],
             apply=apply_changes,
             model=pipeline_config["model"],
+            save_run_log=args.save_run_log,
+            runs_dir=args.runs_dir,
         )
     except (OSError, ValueError) as exc:
         print(f"Pipeline error: {exc}")
@@ -368,6 +371,51 @@ def pipeline_command(args: argparse.Namespace) -> int:
         print(f"周报已生成：{result.report_path}")
     else:
         print(f"Report would be generated: {result.report_path}")
+    run_log_path = getattr(result, "run_log_path", None)
+    if isinstance(run_log_path, str) and run_log_path:
+        print(f"Run log saved: {run_log_path}")
+    return 0
+
+
+def runs_command(args: argparse.Namespace) -> int:
+    if args.limit <= 0:
+        print("runs 参数错误：--limit 必须是正整数。")
+        return 1
+    runs = list_run_logs(args.runs_dir, limit=args.limit)
+    print("Recent runs:")
+    for run in runs:
+        duration = run.get("duration_seconds")
+        duration_text = f"{duration:.2f}s" if isinstance(duration, (int, float)) else "N/A"
+        print(
+            f"{run['run_id']} | {run['command']} | {run['mode']} | "
+            f"{run['status']} | errors: {run['total_errors']} | {duration_text}"
+        )
+    return 0
+
+
+def run_show_command(args: argparse.Namespace) -> int:
+    try:
+        run_log = read_run_log(args.run_id_or_path, runs_dir=args.runs_dir)
+    except OSError as exc:
+        print(f"Run log error: {exc}")
+        return 1
+
+    print(f"run_id: {run_log.get('run_id', '')}")
+    print(f"command: {run_log.get('command', '')}")
+    print(f"mode: {run_log.get('mode', '')}")
+    print(f"started_at: {run_log.get('started_at', '')}")
+    print(f"ended_at: {run_log.get('ended_at', '')}")
+    print(f"duration: {run_log.get('duration_seconds', '')}")
+    summary = run_log.get("summary", {})
+    print(f"summary status: {summary.get('status', '')}")
+    print(f"total_errors: {summary.get('total_errors', 0)}")
+    print("steps:")
+    for step in run_log.get("steps", []):
+        print(f"- {step.get('name', '')} | {step.get('status', '')}")
+        print(f"  metrics: {step.get('metrics', {})}")
+        errors = step.get("errors", [])
+        if errors:
+            print(f"  errors: {errors}")
     return 0
 
 
@@ -469,7 +517,19 @@ def build_parser() -> argparse.ArgumentParser:
     pipeline_parser.add_argument("--model", help="传给 enrich 的 DeepSeek 模型")
     pipeline_parser.add_argument("--dry-run", action="store_true", help="dry-run，不写 CSV 或报告")
     pipeline_parser.add_argument("--apply", action="store_true", help="允许执行写操作")
+    pipeline_parser.add_argument("--save-run-log", action="store_true", help="保存 pipeline 运行日志")
+    pipeline_parser.add_argument("--runs-dir", default="runs", help="运行日志目录，默认 runs")
     pipeline_parser.set_defaults(func=pipeline_command)
+
+    runs_parser = subparsers.add_parser("runs", help="查看最近 pipeline 运行日志")
+    runs_parser.add_argument("--limit", type=int, default=10, help="展示条数，默认 10")
+    runs_parser.add_argument("--runs-dir", default="runs", help="运行日志目录，默认 runs")
+    runs_parser.set_defaults(func=runs_command)
+
+    run_show_parser = subparsers.add_parser("run-show", help="查看某次运行日志详情")
+    run_show_parser.add_argument("run_id_or_path", help="run_id 或 run log 文件路径")
+    run_show_parser.add_argument("--runs-dir", default="runs", help="运行日志目录，默认 runs")
+    run_show_parser.set_defaults(func=run_show_command)
 
     return parser
 

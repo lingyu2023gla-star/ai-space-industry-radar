@@ -131,6 +131,28 @@ class PipelineTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             run_pipeline(report_path=Path("outputs/pipeline_report.md"), top=0)
 
+    def test_pipeline_default_does_not_write_run_log(self) -> None:
+        item = make_item(item_id="1", item_date="2026-06-02")
+        with patch("industry_radar.pipeline.read_items", return_value=[item]):
+            with patch("industry_radar.pipeline.write_run_log") as write_run_log:
+                result = run_pipeline(report_path=Path("outputs/pipeline_report.md"))
+
+        write_run_log.assert_not_called()
+        self.assertIsNone(result.run_log_path)
+
+    def test_pipeline_save_run_log_writes_run_log(self) -> None:
+        item = make_item(item_id="1", item_date="2026-06-02")
+        with TemporaryDirectory() as tmp_dir:
+            with patch("industry_radar.pipeline.read_items", return_value=[item]):
+                result = run_pipeline(
+                    report_path=Path("outputs/pipeline_report.md"),
+                    save_run_log=True,
+                    runs_dir=tmp_dir,
+                )
+
+            self.assertIsNotNone(result.run_log_path)
+            self.assertTrue(Path(result.run_log_path).exists())
+
     def test_pipeline_config_executes_dry_run(self) -> None:
         with TemporaryDirectory() as tmp_dir:
             config_path = Path(tmp_dir) / "pipeline.json"

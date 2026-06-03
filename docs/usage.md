@@ -136,4 +136,21 @@ python -m industry_radar pipeline --sources data/sources.json --limit 5 --top 10
 python -m industry_radar pipeline --config configs/example_pipeline.json
 python -m industry_radar pipeline --config configs/example_pipeline.json --apply
 python -m industry_radar pipeline --config configs/example_ai_pipeline.json --limit 10 --industry space --apply
+python -m industry_radar pipeline --config configs/example_pipeline.json --save-run-log
+```
+
+## runs
+
+查看最近 pipeline 运行日志。
+
+```bash
+python -m industry_radar runs
+```
+
+## run-show
+
+查看某次运行日志详情。
+
+```bash
+python -m industry_radar run-show RUN_ID
 ```

@@ -6,6 +6,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from industry_radar.cli import main
+from industry_radar.run_logger import create_run_log, finalize_run_log, write_run_log
 from tests.test_storage import make_item
 
 
@@ -141,6 +142,49 @@ class ReportCliTest(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         write_items.assert_called_once()
         self.assertEqual(len(write_items.call_args.args[0]), 1)
+
+    def test_pipeline_save_run_log_passes_argument(self) -> None:
+        with patch("industry_radar.cli.run_pipeline") as run:
+            run.return_value.mode = "dry-run"
+            run.return_value.fetch_result = None
+            run.return_value.dedupe_result = None
+            run.return_value.enrich_result = None
+            run.return_value.report_path = Path("outputs/pipeline_report.md")
+            run.return_value.report_written = False
+            run.return_value.run_log_path = "runs/example.json"
+            with contextlib.redirect_stdout(io.StringIO()) as output:
+                exit_code = main(["pipeline", "--save-run-log", "--runs-dir", "runs"])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(run.call_args.kwargs["save_run_log"])
+        self.assertEqual(run.call_args.kwargs["runs_dir"], "runs")
+        self.assertIn("Run log saved: runs/example.json", output.getvalue())
+
+    def test_runs_command_lists_run_logs(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            run_log = finalize_run_log(create_run_log("pipeline", "dry-run", {}))
+            write_run_log(run_log, runs_dir=tmp_dir)
+
+            with contextlib.redirect_stdout(io.StringIO()) as output:
+                exit_code = main(["runs", "--runs-dir", tmp_dir])
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("Recent runs:", output.getvalue())
+        self.assertIn(run_log["run_id"], output.getvalue())
+
+    def test_run_show_command_displays_details(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            run_log = create_run_log("pipeline", "dry-run", {})
+            run_log["run_id"] = "test-run"
+            run_log = finalize_run_log(run_log)
+            write_run_log(run_log, runs_dir=tmp_dir)
+
+            with contextlib.redirect_stdout(io.StringIO()) as output:
+                exit_code = main(["run-show", "test-run", "--runs-dir", tmp_dir])
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("run_id: test-run", output.getvalue())
+        self.assertIn("summary status: success", output.getvalue())
 
 
 if __name__ == "__main__":

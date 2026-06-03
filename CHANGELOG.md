@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.5.0
+
+- 增加 pipeline 运行日志
+- 新增 --save-run-log
+- 新增 runs 命令
+- 新增 run-show 命令
+- 支持记录 fetch / dedupe / enrich / report 指标和错误
+
 ## v1.4.0
 
 - 新增 ArxivSourceAdapter

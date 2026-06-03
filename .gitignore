@@ -12,6 +12,10 @@ __pycache__/
 outputs/*.md
 !outputs/.gitkeep
 
+# Pipeline run logs
+runs/*.json
+!runs/.gitkeep
+
 # Examples are intended for GitHub display
 !examples/*.csv
 !examples/*.json

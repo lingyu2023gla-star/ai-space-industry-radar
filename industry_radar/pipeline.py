@@ -14,6 +14,7 @@ from .fetcher import FetchResult, fetch_and_import
 from .llm_client import call_deepseek_chat
 from .models import IndustryItem
 from .report import write_report
+from .run_logger import add_step, create_run_log, finalize_run_log, write_run_log
 from .storage import filter_items, read_items, write_items
 from .storage_backend import StorageBackend
 
@@ -35,6 +36,8 @@ class PipelineResult:
     enrich_result: PipelineEnrichResult | None = None
     report_path: Path | None = None
     report_written: bool = False
+    run_log: dict | None = None
+    run_log_path: str | None = None
 
 
 def run_pipeline(
@@ -51,6 +54,8 @@ def run_pipeline(
     apply: bool = False,
     model: str | None = None,
     storage: StorageBackend | None = None,
+    save_run_log: bool = False,
+    runs_dir: str = "runs",
 ) -> PipelineResult:
     if limit <= 0:
         raise ValueError("--limit must be a positive integer")
@@ -58,6 +63,23 @@ def run_pipeline(
         raise ValueError("--top must be a positive integer")
 
     result = PipelineResult(mode="apply" if apply else "dry-run")
+    run_log = create_run_log(
+        "pipeline",
+        result.mode,
+        {
+            "sources": str(sources_path) if sources_path else None,
+            "limit": limit,
+            "industry": industry,
+            "since": since,
+            "until": until,
+            "report": str(report_path),
+            "top": top,
+            "enrich": enrich,
+            "overwrite": overwrite,
+            "model": model,
+        },
+    )
+    result.run_log = run_log
 
     if sources_path is not None:
         result.fetch_result = fetch_and_import(
@@ -66,9 +88,38 @@ def run_pipeline(
             industry=industry,
             dry_run=not apply,
         )
+        add_step(
+            run_log,
+            "fetch",
+            status_from_failed_count(result.fetch_result.failed),
+            metrics={
+                "fetched": result.fetch_result.fetched,
+                "imported": result.fetch_result.imported,
+                "skipped_duplicates": result.fetch_result.skipped_duplicates,
+                "failed": result.fetch_result.failed,
+            },
+            errors=result.fetch_result.errors,
+        )
+    else:
+        add_step(
+            run_log,
+            "fetch",
+            "skipped",
+            metrics={"reason": "sources not provided"},
+        )
 
     current_items = _read_pipeline_items(storage)
     result.dedupe_result = dedupe_items(current_items)
+    add_step(
+        run_log,
+        "dedupe",
+        "success",
+        metrics={
+            "duplicate_groups": result.dedupe_result.duplicate_groups,
+            "removed_duplicates": result.dedupe_result.removed_duplicates,
+            "remaining_items": result.dedupe_result.remaining_items,
+        },
+    )
     if apply:
         _write_pipeline_items(result.dedupe_result.items, storage)
         current_items = result.dedupe_result.items
@@ -85,14 +136,47 @@ def run_pipeline(
             model=model,
             storage=storage,
         )
+        add_step(
+            run_log,
+            "enrich",
+            status_from_failed_count(result.enrich_result.failed),
+            metrics={
+                "selected": result.enrich_result.selected,
+                "enriched": result.enrich_result.enriched,
+                "skipped": result.enrich_result.skipped,
+                "failed": result.enrich_result.failed,
+            },
+            errors=result.enrich_result.errors,
+        )
         if apply:
             current_items = _read_pipeline_items(storage)
+    else:
+        add_step(
+            run_log,
+            "enrich",
+            "skipped",
+            metrics={"reason": "enrich disabled"},
+        )
 
     report_items = filter_items(current_items, industry=industry, since=since, until=until)
     result.report_path = report_path
     if apply:
         write_report(report_items, report_path, top=top)
         result.report_written = True
+    add_step(
+        run_log,
+        "report",
+        "success",
+        metrics={
+            "output": str(report_path),
+            "top": top,
+            "industry": industry,
+            "written": result.report_written,
+        },
+    )
+    finalize_run_log(run_log)
+    if save_run_log:
+        result.run_log_path = write_run_log(run_log, runs_dir=runs_dir)
     return result
 
 
@@ -149,3 +233,7 @@ def _write_pipeline_items(
         storage.write_items(items)
         return
     write_items(items)
+
+
+def status_from_failed_count(failed: int) -> str:
+    return "partial_success" if failed else "success"

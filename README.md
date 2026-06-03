@@ -303,6 +303,39 @@ python -m industry_radar pipeline \
 CLI 参数优先级高于 config，合并顺序是 `defaults < config < CLI`。配置文件不应该包含
 API Key，也不能包含 `apply` 字段。
 
+## 运行日志与可观测性
+
+Pipeline 可以显式保存结构化运行日志：
+
+```bash
+python -m industry_radar pipeline --config configs/example_pipeline.json --save-run-log
+```
+
+写入模式也可以保存日志：
+
+```bash
+python -m industry_radar pipeline --config configs/example_pipeline.json --apply --save-run-log
+```
+
+查看最近运行：
+
+```bash
+python -m industry_radar runs
+```
+
+查看某次详情：
+
+```bash
+python -m industry_radar run-show 20260603-223000-pipeline
+```
+
+说明：
+
+- `runs/*.json` 是本地运行产物，已被 `.gitignore` 忽略。
+- 只有传入 `--save-run-log` 才会保存运行日志。
+- run log 记录 `fetch`、`dedupe`、`enrich`、`report` 每一步的 metrics 和 errors。
+- 可用于排查 source 失败、LLM 失败、dedupe 效果和报告生成路径。
+
 ## 报告结构
 
 `report` 会生成 Markdown 行业简报，包含：

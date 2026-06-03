@@ -118,6 +118,23 @@ v1.3 开始，`fetcher.py` 不再直接绑定 RSS 细节，而是作为数据源
 
 旧 sources 配置没有 `type` 字段时默认使用 `rss`，因此仍可运行。
 
+## 可观测性
+
+```mermaid
+flowchart TD
+    A[pipeline] --> B[run_logger]
+    B --> C[runs/*.json]
+    C --> D[runs]
+    C --> E[run-show]
+```
+
+v1.5 开始，pipeline 不仅执行工作流，也可以在显式传入 `--save-run-log` 时记录每步指标。
+run log 覆盖 `fetch`、`dedupe`、`enrich`、`report` 的 metrics 和 errors，用于定位 source
+失败、LLM 失败、去重效果和报告生成结果。
+
+运行日志是观测产物，不改变业务 CSV 数据。`runs/*.json` 默认不提交 Git，可以作为后续
+Web UI、Dashboard 或定时任务的基础数据。
+
 ## 设计原则
 
 - 标准库优先，降低运行和部署门槛。
