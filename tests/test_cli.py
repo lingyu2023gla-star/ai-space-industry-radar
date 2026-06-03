@@ -292,6 +292,24 @@ class ReportCliTest(unittest.TestCase):
         llm.assert_not_called()
         self.assertIn("OpenAI 推进 Agent 产品化", output.getvalue())
 
+    def test_ask_command_embedding_retriever_runs_without_llm(self) -> None:
+        item = make_item(
+            item_id="1",
+            item_date="2026-06-02",
+            title="OpenAI 推进 Agent 产品化",
+            summary="Agent enterprise workflow",
+            signal="Agent 商业化加速",
+            tags="AI;Agent",
+        )
+        with patch("industry_radar.cli.read_items", return_value=[item]):
+            with patch("industry_radar.cli.call_deepseek_chat") as llm:
+                with contextlib.redirect_stdout(io.StringIO()) as output:
+                    exit_code = main(["ask", "Agent 趋势", "--retriever", "embedding"])
+
+        self.assertEqual(exit_code, 0)
+        llm.assert_not_called()
+        self.assertIn("OpenAI 推进 Agent 产品化", output.getvalue())
+
     def test_ask_command_llm_uses_mocked_llm(self) -> None:
         item = make_item(
             item_id="1",

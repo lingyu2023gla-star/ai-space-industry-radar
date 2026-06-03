@@ -465,6 +465,24 @@ python -m industry_radar ask "最近 AI Agent 有哪些趋势？" --llm
 - 结果质量取决于本地数据是否充足。
 - 当前不使用 embedding、向量数据库或外部检索。
 
+## Embedding Retriever
+
+v2.1 引入 Retriever 抽象，默认 `ask` 仍使用 keyword retriever，也可以切换到本地
+Hashing Embedding Retriever：
+
+```bash
+python -m industry_radar ask "AI Agent 有哪些趋势？"
+python -m industry_radar ask "AI Agent 有哪些趋势？" --retriever embedding
+python -m industry_radar ask "商业航天数据服务机会" --industry space --retriever embedding --top 5
+```
+
+说明：
+
+- `KeywordRetriever` 复用原有 lexical retrieval。
+- `EmbeddingRetriever` 当前使用标准库实现的 deterministic hashing embedding。
+- 不依赖外部 embedding API，不使用向量数据库。
+- 未来可以替换为真实 `EmbeddingProvider`。
+
 ## 报告结构
 
 `report` 会生成 Markdown 行业简报，包含：

@@ -32,11 +32,11 @@ from .knowledge_base import (
     build_ask_prompt,
     build_documents_from_items,
     build_retrieval_answer,
-    search_documents,
 )
 from .llm_client import call_deepseek_chat
 from .pipeline import run_pipeline
 from .report import DEFAULT_REPORT_PATH, write_report
+from .retrievers import EmbeddingRetriever, KeywordRetriever
 from .run_logger import list_run_logs, read_run_log
 from .source_health import (
     add_config_sources_to_health,
@@ -490,8 +490,9 @@ def ask_command(args: argparse.Namespace) -> int:
         return 1
     items = read_items()
     documents = build_documents_from_items(items)
+    retriever = KeywordRetriever() if args.retriever == "keyword" else EmbeddingRetriever()
     try:
-        results = search_documents(
+        results = retriever.search(
             args.query,
             documents,
             top_k=args.top,
@@ -684,6 +685,12 @@ def build_parser() -> argparse.ArgumentParser:
     ask_parser.add_argument("--llm", action="store_true", help="显式调用 DeepSeek 综合回答")
     ask_parser.add_argument("--model", help="覆盖默认 DeepSeek 模型")
     ask_parser.add_argument("--show-sources", action="store_true", help="显示检索证据详情")
+    ask_parser.add_argument(
+        "--retriever",
+        choices=("keyword", "embedding"),
+        default="keyword",
+        help="检索器类型，默认 keyword",
+    )
     ask_parser.set_defaults(func=ask_command)
 
     return parser

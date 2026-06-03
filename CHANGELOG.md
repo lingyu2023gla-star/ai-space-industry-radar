@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.1.0
+
+- 新增 Retriever 抽象
+- 新增 KeywordRetriever
+- 新增 HashingEmbeddingProvider
+- 新增 EmbeddingRetriever
+- ask 命令支持 --retriever keyword|embedding
+- 为未来真实 embedding provider / vector database 做准备
+
 ## v2.0.0
 
 - 新增 Local Knowledge Base

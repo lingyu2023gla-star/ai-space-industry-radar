@@ -4,6 +4,7 @@ from industry_radar.knowledge_base import (
     build_ask_prompt,
     build_documents_from_items,
     build_retrieval_answer,
+    filter_documents,
     score_document,
     search_documents,
     tokenize,
@@ -123,6 +124,13 @@ class KnowledgeBaseTest(unittest.TestCase):
         results = search_documents("agent", docs, since="2026-06-02", until="2026-06-03")
 
         self.assertEqual([result["id"] for result in results], ["new"])
+
+    def test_filter_documents_reuses_search_filters(self) -> None:
+        docs = build_documents_from_items([item(id="1", tags="AI;Agent"), item(id="2", tags="Space")])
+
+        results = filter_documents(docs, tag="agent")
+
+        self.assertEqual([result["id"] for result in results], ["1"])
 
     def test_search_documents_empty_query_raises_value_error(self) -> None:
         with self.assertRaises(ValueError):

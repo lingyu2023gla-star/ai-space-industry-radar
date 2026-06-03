@@ -107,6 +107,37 @@ def search_documents(
         raise ValueError("top_k must be a positive integer")
     if not clean_text(query):
         raise ValueError("query must not be empty")
+    filtered = filter_documents(
+        documents,
+        industry=industry,
+        tag=tag,
+        company=company,
+        since=since,
+        until=until,
+    )
+
+    scored = []
+    for doc in filtered:
+        score = score_document(query, doc)
+        if score > 0:
+            result = dict(doc)
+            result["score"] = score
+            scored.append(result)
+    return sorted(
+        scored,
+        key=lambda doc: (doc["score"], int_or_zero(doc.get("importance")), str(doc.get("date", ""))),
+        reverse=True,
+    )[:top_k]
+
+
+def filter_documents(
+    documents: list[dict],
+    industry: str | None = None,
+    tag: str | None = None,
+    company: str | None = None,
+    since: str | None = None,
+    until: str | None = None,
+) -> list[dict]:
     filtered = documents
     if industry:
         industry_value = normalize_industry(industry)
@@ -129,19 +160,7 @@ def search_documents(
     if until:
         until_value = validate_date(until)
         filtered = [doc for doc in filtered if str(doc.get("date", "")) <= until_value]
-
-    scored = []
-    for doc in filtered:
-        score = score_document(query, doc)
-        if score > 0:
-            result = dict(doc)
-            result["score"] = score
-            scored.append(result)
-    return sorted(
-        scored,
-        key=lambda doc: (doc["score"], int_or_zero(doc.get("importance")), str(doc.get("date", ""))),
-        reverse=True,
-    )[:top_k]
+    return [dict(doc) for doc in filtered]
 
 
 def build_retrieval_answer(query: str, results: list[dict]) -> str:
