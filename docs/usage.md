@@ -213,4 +213,6 @@ python -m industry_radar ask "多智能体有什么研究趋势？" --tag arXiv 
 python -m industry_radar ask "最近 AI Agent 有哪些趋势？" --llm
 python -m industry_radar ask "AI Agent 有哪些趋势？" --retriever embedding
 python -m industry_radar ask "AI Agent 有哪些趋势？" --retriever fts
+python -m industry_radar ask "AI Agent 有哪些趋势？" --retriever fts --no-citations
+python -m industry_radar ask "AI Agent 有哪些趋势？" --retriever fts --llm --citations
 ```

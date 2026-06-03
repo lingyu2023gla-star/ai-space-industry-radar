@@ -292,6 +292,8 @@ class ReportCliTest(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         llm.assert_not_called()
         self.assertIn("OpenAI 推进 Agent 产品化", output.getvalue())
+        self.assertIn("[1]", output.getvalue())
+        self.assertIn("相关证据", output.getvalue())
 
     def test_ask_command_embedding_retriever_runs_without_llm(self) -> None:
         item = make_item(
@@ -310,6 +312,23 @@ class ReportCliTest(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         llm.assert_not_called()
         self.assertIn("OpenAI 推进 Agent 产品化", output.getvalue())
+
+    def test_ask_command_no_citations_runs(self) -> None:
+        item = make_item(
+            item_id="1",
+            item_date="2026-06-02",
+            title="OpenAI 推进 Agent 产品化",
+            summary="Agent enterprise workflow",
+            signal="Agent 商业化加速",
+            tags="AI;Agent",
+        )
+        with patch("industry_radar.cli.read_items", return_value=[item]):
+            with contextlib.redirect_stdout(io.StringIO()) as output:
+                exit_code = main(["ask", "Agent 趋势", "--no-citations"])
+
+        self.assertEqual(exit_code, 0)
+        self.assertNotIn("[1]", output.getvalue())
+        self.assertIn("1. OpenAI 推进 Agent 产品化", output.getvalue())
 
     @unittest.skipUnless(is_fts5_supported(), "SQLite FTS5 is not available")
     def test_ask_command_fts_retriever_runs_without_llm(self) -> None:
@@ -363,6 +382,36 @@ class ReportCliTest(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         llm.assert_called_once()
         self.assertIn("LLM answer", output.getvalue())
+        self.assertIn("证据列表", output.getvalue())
+
+    def test_ask_command_llm_receives_numbered_evidence(self) -> None:
+        item = make_item(
+            item_id="1",
+            item_date="2026-06-02",
+            title="OpenAI 推进 Agent 产品化",
+            summary="Agent enterprise workflow",
+            signal="Agent 商业化加速",
+            tags="AI;Agent",
+        )
+        with patch("industry_radar.cli.read_items", return_value=[item]):
+            with patch("industry_radar.cli.call_deepseek_chat", return_value="LLM answer") as llm:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    exit_code = main(["ask", "Agent 趋势", "--llm", "--citations"])
+
+        self.assertEqual(exit_code, 0)
+        messages = llm.call_args.args[0]
+        self.assertIn("[1]", messages[1]["content"])
+        self.assertIn("标题：OpenAI 推进 Agent 产品化", messages[1]["content"])
+
+    def test_ask_command_without_results_does_not_call_llm(self) -> None:
+        with patch("industry_radar.cli.read_items", return_value=[]):
+            with patch("industry_radar.cli.call_deepseek_chat") as llm:
+                with contextlib.redirect_stdout(io.StringIO()) as output:
+                    exit_code = main(["ask", "missing", "--llm"])
+
+        self.assertEqual(exit_code, 0)
+        llm.assert_not_called()
+        self.assertIn("没有在本地知识库", output.getvalue())
 
     def test_ask_command_does_not_write_csv(self) -> None:
         item = make_item(

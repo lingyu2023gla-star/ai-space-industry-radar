@@ -2,9 +2,12 @@ import unittest
 
 from industry_radar.knowledge_base import (
     build_ask_prompt,
+    build_citation_entries,
     build_documents_from_items,
     build_retrieval_answer,
     filter_documents,
+    format_citation_label,
+    format_citations_text,
     score_document,
     search_documents,
     tokenize,
@@ -139,12 +142,63 @@ class KnowledgeBaseTest(unittest.TestCase):
     def test_build_retrieval_answer_without_results(self) -> None:
         self.assertIn("没有在本地知识库", build_retrieval_answer("question", []))
 
-    def test_build_retrieval_answer_with_results_contains_title(self) -> None:
+    def test_format_citation_label(self) -> None:
+        self.assertEqual(format_citation_label(1), "[1]")
+
+    def test_format_citation_label_invalid_index_raises(self) -> None:
+        with self.assertRaises(ValueError):
+            format_citation_label(0)
+
+    def test_build_citation_entries_generates_numbered_evidence(self) -> None:
+        result = build_documents_from_items([item()])[0]
+
+        citation = build_citation_entries([result])[0]
+
+        self.assertEqual(citation["index"], 1)
+        self.assertEqual(citation["label"], "[1]")
+        self.assertEqual(citation["title"], "OpenAI 推进 Agent 产品化")
+
+    def test_build_citation_entries_does_not_modify_results(self) -> None:
+        result = build_documents_from_items([item()])[0]
+        original = dict(result)
+
+        build_citation_entries([result])
+
+        self.assertEqual(result, original)
+
+    def test_format_citations_text_contains_title_and_source_url(self) -> None:
+        result = build_documents_from_items([item()])[0]
+        citations = build_citation_entries([result])
+
+        text = format_citations_text(citations)
+
+        self.assertIn("[1] OpenAI 推进 Agent 产品化", text)
+        self.assertIn("链接：https://example.com", text)
+
+    def test_format_citations_text_omits_empty_source_url(self) -> None:
+        result = build_documents_from_items([item(source_url="")])[0]
+        citations = build_citation_entries([result])
+
+        text = format_citations_text(citations)
+
+        self.assertNotIn("链接：", text)
+
+    def test_build_retrieval_answer_with_results_contains_citation_label(self) -> None:
         result = build_documents_from_items([item()])[0]
 
         answer = build_retrieval_answer("agent", [result])
 
+        self.assertIn("[1]", answer)
         self.assertIn("OpenAI 推进 Agent 产品化", answer)
+        self.assertIn("相关证据", answer)
+
+    def test_build_retrieval_answer_without_citations_uses_legacy_style(self) -> None:
+        result = build_documents_from_items([item()])[0]
+
+        answer = build_retrieval_answer("agent", [result], with_citations=False)
+
+        self.assertNotIn("[1]", answer)
+        self.assertIn("1. OpenAI 推进 Agent 产品化", answer)
 
     def test_build_ask_prompt_contains_query_and_evidence(self) -> None:
         result = build_documents_from_items([item()])[0]
@@ -152,7 +206,15 @@ class KnowledgeBaseTest(unittest.TestCase):
         messages = build_ask_prompt("AI Agent 趋势", [result])
 
         self.assertIn("AI Agent 趋势", messages[1]["content"])
-        self.assertIn("[1] OpenAI 推进 Agent 产品化", messages[1]["content"])
+        self.assertIn("[1]", messages[1]["content"])
+        self.assertIn("标题：OpenAI 推进 Agent 产品化", messages[1]["content"])
+
+    def test_build_ask_prompt_requires_llm_to_use_citation_labels(self) -> None:
+        result = build_documents_from_items([item()])[0]
+
+        messages = build_ask_prompt("AI Agent 趋势", [result])
+
+        self.assertIn("必须使用 [1]、[2] 形式引用证据", messages[1]["content"])
 
 
 if __name__ == "__main__":

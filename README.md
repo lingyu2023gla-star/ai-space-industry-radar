@@ -465,6 +465,26 @@ python -m industry_radar ask "最近 AI Agent 有哪些趋势？" --llm
 - 结果质量取决于本地数据是否充足。
 - 默认不使用 embedding、向量数据库或外部检索。
 
+## Ask with Citations
+
+v2.3 开始，`ask` 默认显示引用编号和证据列表。引用来自本地检索结果，`[1]`、`[2]`
+对应下方证据中的 `source` / `source_url` 信息：
+
+```bash
+python -m industry_radar ask "AI Agent 有哪些趋势？" --retriever fts
+python -m industry_radar ask "AI Agent 有哪些趋势？" --retriever embedding --citations
+python -m industry_radar ask "AI Agent 有哪些趋势？" --retriever fts --no-citations
+python -m industry_radar ask "AI Agent 有哪些趋势？" --retriever fts --llm --citations
+```
+
+说明：
+
+- 引用不是外部实时验证，而是本地知识库中的 `source` / `source_url`。
+- 默认本地回答会使用 `[1][2]` 标记，并输出“相关证据”。
+- `--llm` 模式会要求模型基于相同编号证据回答，并使用 `[1]`、`[2]` 引用。
+- 如果本地数据不足，回答会说明没有找到足够相关的信息。
+- `--no-citations` 可以关闭引用编号，使用接近旧版的简洁回答。
+
 ## Embedding Retriever
 
 v2.1 引入 Retriever 抽象，默认 `ask` 仍使用 keyword retriever，也可以切换到本地

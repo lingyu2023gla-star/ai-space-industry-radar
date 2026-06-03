@@ -163,9 +163,77 @@ def filter_documents(
     return [dict(doc) for doc in filtered]
 
 
-def build_retrieval_answer(query: str, results: list[dict]) -> str:
+def format_citation_label(index: int) -> str:
+    if index <= 0:
+        raise ValueError("citation index must be positive")
+    return f"[{index}]"
+
+
+def build_citation_entries(results: list[dict]) -> list[dict]:
+    entries = []
+    for index, result in enumerate(results, start=1):
+        entries.append(
+            {
+                "index": index,
+                "label": format_citation_label(index),
+                "title": str(result.get("title", "")),
+                "date": str(result.get("date", "")),
+                "industry": str(result.get("industry", "")),
+                "company": str(result.get("company", "")),
+                "source": str(result.get("source", "")),
+                "source_url": str(result.get("source_url", "")),
+                "score": result.get("score", ""),
+                "summary": str(result.get("summary", "")),
+                "signal": str(result.get("signal", "")),
+            }
+        )
+    return entries
+
+
+def format_citations_text(citations: list[dict], include_summary: bool = False) -> str:
+    if not citations:
+        return ""
+    lines = []
+    for citation in citations:
+        lines.append(f"{citation.get('label', '')} {citation.get('title', '')}".rstrip())
+        if citation.get("date"):
+            lines.append(f"    - 日期：{citation['date']}")
+        if citation.get("company"):
+            lines.append(f"    - 公司：{citation['company']}")
+        if citation.get("source"):
+            lines.append(f"    - 来源：{citation['source']}")
+        if citation.get("source_url"):
+            lines.append(f"    - 链接：{citation['source_url']}")
+        if include_summary and citation.get("summary"):
+            lines.append(f"    - 摘要：{citation['summary']}")
+        if citation.get("signal"):
+            lines.append(f"    - 行业信号：{citation['signal']}")
+        lines.append("")
+    return "\n".join(lines).rstrip()
+
+
+def build_retrieval_answer(
+    query: str,
+    results: list[dict],
+    with_citations: bool = True,
+    include_sources: bool = True,
+) -> str:
     if not results:
         return "没有在本地知识库中找到足够相关的信息。"
+    if with_citations:
+        citations = build_citation_entries(results)
+        labels = "".join(citation["label"] for citation in citations[: min(3, len(citations))])
+        lines = [
+            f"问题：{query}",
+            "",
+            f"根据本地知识库，相关信息主要集中在检索到的行业事件和趋势信号中 {labels}。",
+        ]
+        if include_sources:
+            citations_text = format_citations_text(citations)
+            if citations_text:
+                lines.extend(["", "相关证据：", citations_text])
+        return "\n".join(lines)
+
     lines = [
         f"问题：{query}",
         "",
@@ -188,17 +256,19 @@ def build_retrieval_answer(query: str, results: list[dict]) -> str:
 
 def build_ask_prompt(query: str, results: list[dict]) -> list[dict]:
     evidence_lines = []
-    for index, result in enumerate(results, start=1):
+    for citation in build_citation_entries(results):
         evidence_lines.append(
             "\n".join(
                 [
-                    f"[{index}] {result.get('title', '')}",
-                    f"日期：{result.get('date', '')}",
-                    f"公司：{result.get('company', '')}",
-                    f"摘要：{result.get('summary', '')}",
-                    f"行业信号：{result.get('signal', '')}",
-                    f"标签：{result.get('tags', '')}",
-                    f"来源链接：{result.get('source_url', '')}",
+                    citation["label"],
+                    f"标题：{citation.get('title', '')}",
+                    f"日期：{citation.get('date', '')}",
+                    f"行业：{citation.get('industry', '')}",
+                    f"公司：{citation.get('company', '')}",
+                    f"来源：{citation.get('source', '')}",
+                    f"链接：{citation.get('source_url', '')}",
+                    f"摘要：{citation.get('summary', '')}",
+                    f"行业信号：{citation.get('signal', '')}",
                 ]
             )
         )
@@ -213,7 +283,10 @@ def build_ask_prompt(query: str, results: list[dict]) -> list[dict]:
                 f"用户问题：{query}\n\n"
                 "检索到的证据：\n"
                 + "\n\n".join(evidence_lines)
-                + "\n\n请用中文回答，明确引用证据编号，例如 [1]、[2]。如果证据不足，要说明不足。"
+                + (
+                    "\n\n请用中文回答。只能基于给定证据回答，不要编造证据外信息。"
+                    "回答中必须使用 [1]、[2] 形式引用证据。如果证据不足，要说明不足。"
+                )
             ),
         },
     ]

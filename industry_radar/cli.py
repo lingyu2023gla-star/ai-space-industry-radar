@@ -30,8 +30,10 @@ from .importer import import_items
 from .fetcher import fetch_and_import
 from .knowledge_base import (
     build_ask_prompt,
+    build_citation_entries,
     build_documents_from_items,
     build_retrieval_answer,
+    format_citations_text,
 )
 from .llm_client import call_deepseek_chat
 from .pipeline import run_pipeline
@@ -525,8 +527,21 @@ def ask_command(args: argparse.Namespace) -> int:
             print(f"LLM error: {exc}")
             return 1
         print(answer)
+        if args.citations:
+            citations_text = format_citations_text(build_citation_entries(results))
+            if citations_text:
+                print("")
+                print("证据列表：")
+                print(citations_text)
     else:
-        print(build_retrieval_answer(args.query, results))
+        print(
+            build_retrieval_answer(
+                args.query,
+                results,
+                with_citations=args.citations,
+                include_sources=args.citations,
+            )
+        )
 
     if args.show_sources and results:
         print("")
@@ -693,6 +708,20 @@ def build_parser() -> argparse.ArgumentParser:
     ask_parser.add_argument("--llm", action="store_true", help="显式调用 DeepSeek 综合回答")
     ask_parser.add_argument("--model", help="覆盖默认 DeepSeek 模型")
     ask_parser.add_argument("--show-sources", action="store_true", help="显示检索证据详情")
+    citation_group = ask_parser.add_mutually_exclusive_group()
+    citation_group.add_argument(
+        "--citations",
+        dest="citations",
+        action="store_true",
+        default=True,
+        help="显示引用编号和证据列表，默认开启",
+    )
+    citation_group.add_argument(
+        "--no-citations",
+        dest="citations",
+        action="store_false",
+        help="关闭引用编号，使用接近旧版的简洁回答",
+    )
     ask_parser.add_argument(
         "--retriever",
         choices=("keyword", "embedding", "fts"),

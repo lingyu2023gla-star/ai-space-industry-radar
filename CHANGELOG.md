@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.3.0
+
+- ask 默认支持 citation labels
+- 本地回答显示 [1][2] 引用
+- LLM ask prompt 支持编号证据
+- 新增证据列表格式化能力
+
 ## v2.2.0
 
 - 新增 SQLiteFTSRetriever
