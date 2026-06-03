@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.1.0
+
+- 增加配置化 Pipeline
+- 新增 configs 示例
+- 支持 defaults < config < CLI 参数合并
+- 保持 --apply 显式写入策略
+
 ## v1.0.0
 
 - 完成项目文档化与作品集包装

@@ -87,3 +87,11 @@ python -m industry_radar pipeline --sources data/sources.json --limit 5 --top 10
 ```
 
 默认不传 `--apply` 时为 dry-run，不写 CSV，也不生成报告。
+
+使用 JSON 配置文件：
+
+```bash
+python -m industry_radar pipeline --config configs/example_pipeline.json
+python -m industry_radar pipeline --config configs/example_pipeline.json --apply
+python -m industry_radar pipeline --config configs/example_ai_pipeline.json --limit 10 --industry space --apply
+```

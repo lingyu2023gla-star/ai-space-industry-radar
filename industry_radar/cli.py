@@ -19,6 +19,12 @@ from .enricher import (
     parse_enrichment_result,
 )
 from .data_governance import build_dataset_stats, dedupe_items
+from .config import (
+    PIPELINE_DEFAULTS,
+    load_json_config,
+    merge_pipeline_config,
+    validate_pipeline_config,
+)
 from .importer import import_items
 from .fetcher import fetch_and_import
 from .llm_client import call_deepseek_chat
@@ -289,23 +295,46 @@ def dedupe_command(args: argparse.Namespace) -> int:
 def pipeline_command(args: argparse.Namespace) -> int:
     apply_changes = args.apply and not args.dry_run
     try:
+        file_config = validate_pipeline_config(load_json_config(args.config))
+        cli_overrides = validate_pipeline_config(
+            {
+                "sources": args.sources,
+                "limit": args.limit,
+                "industry": args.industry,
+                "since": args.since,
+                "until": args.until,
+                "report": args.report,
+                "top": args.top,
+                "enrich": True if args.enrich else None,
+                "overwrite": True if args.overwrite else None,
+                "model": args.model,
+            }
+        )
+        pipeline_config = merge_pipeline_config(
+            PIPELINE_DEFAULTS,
+            file_config,
+            cli_overrides,
+        )
         result = run_pipeline(
-            sources_path=Path(args.sources) if args.sources else None,
-            limit=args.limit,
-            industry=args.industry,
-            since=args.since,
-            until=args.until,
-            report_path=Path(args.report),
-            top=args.top,
-            enrich=args.enrich,
-            overwrite=args.overwrite,
+            sources_path=Path(pipeline_config["sources"]) if pipeline_config["sources"] else None,
+            limit=pipeline_config["limit"],
+            industry=pipeline_config["industry"],
+            since=pipeline_config["since"],
+            until=pipeline_config["until"],
+            report_path=Path(pipeline_config["report"]),
+            top=pipeline_config["top"],
+            enrich=pipeline_config["enrich"],
+            overwrite=pipeline_config["overwrite"],
             apply=apply_changes,
+            model=pipeline_config["model"],
         )
     except (OSError, ValueError) as exc:
         print(f"Pipeline error: {exc}")
         return 1
 
     print(f"[Pipeline] Mode: {result.mode}")
+    print("[Pipeline] Config:")
+    print_pipeline_config(pipeline_config)
     if result.fetch_result is not None:
         print("[Pipeline] Step 1: fetch")
         print(f"Fetched: {result.fetch_result.fetched}")
@@ -323,7 +352,7 @@ def pipeline_command(args: argparse.Namespace) -> int:
         print(f"Removed duplicates: {result.dedupe_result.removed_duplicates}")
         print(f"Remaining items: {result.dedupe_result.remaining_items}")
 
-    if args.enrich:
+    if pipeline_config["enrich"]:
         print("[Pipeline] Step 3: enrich")
         if result.enrich_result is not None:
             print(f"Selected: {result.enrich_result.selected}")
@@ -333,13 +362,24 @@ def pipeline_command(args: argparse.Namespace) -> int:
             for error in result.enrich_result.errors:
                 print(error)
 
-    report_step = 4 if args.enrich else 3
+    report_step = 4 if pipeline_config["enrich"] else 3
     print(f"[Pipeline] Step {report_step}: report")
     if result.report_written:
         print(f"周报已生成：{result.report_path}")
     else:
         print(f"Report would be generated: {result.report_path}")
     return 0
+
+
+def print_pipeline_config(config: dict) -> None:
+    for key in ("sources", "limit", "industry", "top", "report", "enrich", "overwrite"):
+        print(f"- {key}: {format_config_value(config.get(key))}")
+
+
+def format_config_value(value) -> str:
+    if isinstance(value, bool):
+        return str(value).lower()
+    return str(value)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -412,19 +452,21 @@ def build_parser() -> argparse.ArgumentParser:
     dedupe_parser.set_defaults(func=dedupe_command)
 
     pipeline_parser = subparsers.add_parser("pipeline", help="执行 fetch/dedupe/enrich/report 工作流")
+    pipeline_parser.add_argument("--config", help="Pipeline JSON 配置文件路径")
     pipeline_parser.add_argument("--sources", help="RSS sources 配置文件路径")
-    pipeline_parser.add_argument("--limit", type=int, default=5, help="每个 source 抓取条数，默认 5")
+    pipeline_parser.add_argument("--limit", type=int, default=None, help="每个 source 抓取条数，默认 5")
     pipeline_parser.add_argument("--industry", help="按行业筛选")
     pipeline_parser.add_argument("--since", help="用于 enrich/report 的起始日期，格式 YYYY-MM-DD")
     pipeline_parser.add_argument("--until", help="用于 enrich/report 的截止日期，格式 YYYY-MM-DD")
     pipeline_parser.add_argument(
         "--report",
-        default="outputs/pipeline_report.md",
+        default=None,
         help="报告输出路径，默认 outputs/pipeline_report.md",
     )
     pipeline_parser.add_argument("--top", type=int, help="报告输出前 N 条")
     pipeline_parser.add_argument("--enrich", action="store_true", help="执行 DeepSeek enrich")
     pipeline_parser.add_argument("--overwrite", action="store_true", help="传给 enrich，覆盖已有字段")
+    pipeline_parser.add_argument("--model", help="传给 enrich 的 DeepSeek 模型")
     pipeline_parser.add_argument("--dry-run", action="store_true", help="dry-run，不写 CSV 或报告")
     pipeline_parser.add_argument("--apply", action="store_true", help="允许执行写操作")
     pipeline_parser.set_defaults(func=pipeline_command)

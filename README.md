@@ -246,6 +246,18 @@ python -m industry_radar dedupe --apply
 python -m industry_radar pipeline --sources data/sources.json --limit 5 --top 10 --report outputs/weekly.md --apply
 ```
 
+也可以使用 JSON 配置文件驱动：
+
+```bash
+python -m industry_radar pipeline --config configs/example_pipeline.json
+python -m industry_radar pipeline --config configs/example_pipeline.json --apply
+python -m industry_radar pipeline \
+  --config configs/example_ai_pipeline.json \
+  --limit 10 \
+  --industry space \
+  --apply
+```
+
 默认 pipeline 是 dry-run，不写 CSV，也不生成报告文件。只有传入 `--apply` 才会执行写操作。
 
 常用参数：
@@ -260,6 +272,10 @@ python -m industry_radar pipeline --sources data/sources.json --limit 5 --top 10
 - `--overwrite`：传给 enrich，允许覆盖已有字段。
 - `--dry-run`：预览流程，不写 CSV 或报告。
 - `--apply`：允许写 CSV 和报告。
+
+配置文件只控制 pipeline 参数，不控制写入权限。`--apply` 必须在命令行显式传入。
+CLI 参数优先级高于 config，合并顺序是 `defaults < config < CLI`。配置文件不应该包含
+API Key，也不能包含 `apply` 字段。
 
 ## 报告结构
 

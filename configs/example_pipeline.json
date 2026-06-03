@@ -1,0 +1,12 @@
+{
+  "sources": "data/sources.json",
+  "limit": 3,
+  "industry": null,
+  "since": null,
+  "until": null,
+  "top": 10,
+  "report": "outputs/pipeline_report.md",
+  "enrich": false,
+  "overwrite": false,
+  "model": "deepseek-v4-pro"
+}

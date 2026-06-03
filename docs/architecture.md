@@ -57,6 +57,18 @@ sequenceDiagram
     CLI->>Report: generate markdown
 ```
 
+## 配置驱动流程
+
+```mermaid
+flowchart TD
+    A[config.json] --> B[config.py load / validate / merge]
+    B --> C[pipeline.py]
+    C --> D[fetch]
+    C --> E[dedupe]
+    C --> F[enrich]
+    C --> G[report]
+```
+
 ## 设计原则
 
 - 标准库优先，降低运行和部署门槛。

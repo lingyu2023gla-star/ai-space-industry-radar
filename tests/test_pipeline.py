@@ -1,10 +1,13 @@
 import unittest
+import json
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from industry_radar.data_governance import DedupeResult
 from industry_radar.fetcher import FetchResult
 from industry_radar.pipeline import PipelineEnrichResult, run_pipeline
+from industry_radar.cli import main
 from tests.test_storage import make_item
 
 
@@ -127,6 +130,75 @@ class PipelineTest(unittest.TestCase):
             run_pipeline(report_path=Path("outputs/pipeline_report.md"), limit=0)
         with self.assertRaises(ValueError):
             run_pipeline(report_path=Path("outputs/pipeline_report.md"), top=0)
+
+    def test_pipeline_config_executes_dry_run(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            config_path = Path(tmp_dir) / "pipeline.json"
+            config_path.write_text(
+                json.dumps({"limit": 3, "industry": "AI", "report": "outputs/ai.md"}),
+                encoding="utf-8",
+            )
+            with patch("industry_radar.cli.run_pipeline") as run:
+                run.return_value.mode = "dry-run"
+                run.return_value.fetch_result = None
+                run.return_value.dedupe_result = None
+                run.return_value.enrich_result = None
+                run.return_value.report_path = Path("outputs/ai.md")
+                run.return_value.report_written = False
+                exit_code = main(["pipeline", "--config", str(config_path)])
+
+        self.assertEqual(exit_code, 0)
+        self.assertFalse(run.call_args.kwargs["apply"])
+        self.assertEqual(run.call_args.kwargs["limit"], 3)
+        self.assertEqual(run.call_args.kwargs["industry"], "AI")
+
+    def test_pipeline_cli_overrides_config(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            config_path = Path(tmp_dir) / "pipeline.json"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "limit": 3,
+                        "industry": "AI",
+                        "top": 5,
+                        "report": "outputs/ai_weekly.md",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with patch("industry_radar.cli.run_pipeline") as run:
+                run.return_value.mode = "dry-run"
+                run.return_value.fetch_result = None
+                run.return_value.dedupe_result = None
+                run.return_value.enrich_result = None
+                run.return_value.report_path = Path("outputs/ai_weekly.md")
+                run.return_value.report_written = False
+                exit_code = main(
+                    [
+                        "pipeline",
+                        "--config",
+                        str(config_path),
+                        "--limit",
+                        "10",
+                        "--industry",
+                        "space",
+                    ]
+                )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(run.call_args.kwargs["limit"], 10)
+        self.assertEqual(run.call_args.kwargs["industry"], "Commercial Space")
+        self.assertEqual(run.call_args.kwargs["top"], 5)
+        self.assertEqual(run.call_args.kwargs["report_path"], Path("outputs/ai_weekly.md"))
+
+    def test_pipeline_config_apply_key_returns_error(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            config_path = Path(tmp_dir) / "pipeline.json"
+            config_path.write_text(json.dumps({"apply": True}), encoding="utf-8")
+
+            exit_code = main(["pipeline", "--config", str(config_path)])
+
+        self.assertEqual(exit_code, 1)
 
 
 if __name__ == "__main__":
