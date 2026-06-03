@@ -1,79 +1,42 @@
 from __future__ import annotations
 
-import csv
 from pathlib import Path
 
 from .models import (
-    FIELDNAMES,
     IndustryItem,
     clean_prompt_value,
     normalize_industry,
     normalize_tags,
     validate_date,
 )
-
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_CSV_PATH = PROJECT_ROOT / "data" / "industry_items.csv"
+from .storage_backend import DEFAULT_DATA_PATH, PROJECT_ROOT, CsvStorage
 
 
 def migrate_csv(path: Path) -> None:
-    with path.open("r", newline="", encoding="utf-8") as file:
-        reader = csv.DictReader(file)
-        current_fieldnames = reader.fieldnames or []
-        rows = list(reader)
+    CsvStorage(path).migrate_csv()
 
-    if current_fieldnames == FIELDNAMES:
-        return
 
-    migrated_rows = []
-    for row in rows:
-        migrated_rows.append(
-            {field: clean_prompt_value(str(row.get(field, ""))) for field in FIELDNAMES}
-        )
-
-    with path.open("w", newline="", encoding="utf-8") as file:
-        writer = csv.DictWriter(file, fieldnames=FIELDNAMES)
-        writer.writeheader()
-        writer.writerows(migrated_rows)
+DEFAULT_CSV_PATH = DEFAULT_DATA_PATH
 
 
 def ensure_csv(path: Path = DEFAULT_CSV_PATH) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if not path.exists() or path.stat().st_size == 0:
-        with path.open("w", newline="", encoding="utf-8") as file:
-            writer = csv.DictWriter(file, fieldnames=FIELDNAMES)
-            writer.writeheader()
-        return
-    migrate_csv(path)
-
-
-def read_items(path: Path = DEFAULT_CSV_PATH) -> list[IndustryItem]:
-    ensure_csv(path)
-    items: list[IndustryItem] = []
-    with path.open("r", newline="", encoding="utf-8") as file:
-        reader = csv.DictReader(file)
-        for row in reader:
-            if not any(row.values()):
-                continue
-            items.append(IndustryItem.from_row(row))
-    return items
+    CsvStorage(path).ensure_csv()
 
 
 def append_item(item: IndustryItem, path: Path = DEFAULT_CSV_PATH) -> None:
-    ensure_csv(path)
-    with path.open("a", newline="", encoding="utf-8") as file:
-        writer = csv.DictWriter(file, fieldnames=FIELDNAMES)
-        writer.writerow(item.to_row())
+    CsvStorage(path).append_item(item)
+
+
+def append_items(items: list[IndustryItem], path: Path = DEFAULT_CSV_PATH) -> None:
+    CsvStorage(path).append_items(items)
+
+
+def read_items(path: Path = DEFAULT_CSV_PATH) -> list[IndustryItem]:
+    return CsvStorage(path).read_items()
 
 
 def write_items(items: list[IndustryItem], path: Path = DEFAULT_CSV_PATH) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8") as file:
-        writer = csv.DictWriter(file, fieldnames=FIELDNAMES)
-        writer.writeheader()
-        for item in items:
-            writer.writerow(item.to_row())
+    CsvStorage(path).write_items(items)
 
 
 def filter_items(

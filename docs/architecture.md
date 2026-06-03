@@ -26,7 +26,8 @@ flowchart TD
 |---|---|
 | `cli.py` | 命令行入口，解析参数并调用各功能模块 |
 | `models.py` | 数据模型、输入清洗、行业标准化、日期与重要性校验 |
-| `storage.py` | CSV 读写、旧表头兼容迁移、整体写回 |
+| `storage_backend.py` | `StorageBackend` 抽象、`CsvStorage` 实现、存储后端工厂 |
+| `storage.py` | 兼容层函数，委托给 `CsvStorage` 并保留旧调用方式 |
 | `importer.py` | JSON / CSV 批量导入、导入记录标准化、导入去重 |
 | `fetcher.py` | RSS / Atom 采集、XML 清洗解析、feed item 转换 |
 | `enricher.py` | LLM prompt 构造、增强结果解析、字段合并 |
@@ -68,6 +69,23 @@ flowchart TD
     C --> F[enrich]
     C --> G[report]
 ```
+
+## 存储层抽象
+
+```mermaid
+flowchart TD
+    A[CLI / Pipeline] --> B[StorageBackend]
+    B --> C[CsvStorage]
+    C --> D[data/industry_items.csv]
+```
+
+v1.2 开始，上层业务可以依赖 `StorageBackend` 的 `read_items`、`write_items`
+和 `append_items` 能力，而不直接绑定 CSV 细节。当前默认后端仍然是 `CsvStorage`，
+CSV 表头、兼容迁移和命令行为保持不变。
+
+`storage.py` 继续保留 `read_items`、`write_items`、`append_item`、`append_items`
+等旧函数，内部委托给 `CsvStorage`。这样可以避免一次性重构所有业务模块，同时为未来
+扩展 `SQLiteStorage` 留出接口。
 
 ## 设计原则
 

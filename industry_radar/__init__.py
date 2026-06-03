@@ -1,3 +1,3 @@
 """AI and commercial space industry radar."""
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"

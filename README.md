@@ -81,6 +81,10 @@ id,date,industry,category,company,title,source,source_url,summary,signal,tags,im
 
 旧版本 CSV 会自动兼容。读取旧表头时，缺失字段会填充为空字符串；写入新记录时会迁移到完整字段顺序。
 
+v1.2 引入 Storage Interface，当前默认实现为 `CsvStorage`，并通过 `storage.py`
+保留旧函数兼容层。CLI 用户行为和 CSV 文件格式保持不变，后续可以在同一接口下扩展
+`SQLiteStorage`。
+
 ## 安装
 
 本项目优先使用 Python 标准库，无第三方运行依赖。建议使用 Python 3.10+。
@@ -343,6 +347,7 @@ python3 -B -m unittest discover -s tests
 
 - 使用 Python 标准库构建模块化 CLI 工具。
 - 设计统一 `IndustryItem` 数据模型，支撑录入、导入、采集、增强、查询和报告生成。
+- 引入 Storage Interface，当前以 `CsvStorage` 承载 CSV，预留未来 `SQLiteStorage` 扩展点。
 - 实现 RSS / Atom、JSON、CSV 多入口数据流。
 - 实现事件级去重与字段合并，支持 URL 去重和业务事件去重。
 - 接入 DeepSeek OpenAI-compatible API 做结构化增强，生成 `summary`、`signal`、`tags`、`importance`。

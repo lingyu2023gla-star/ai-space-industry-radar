@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.2.0
+
+- 引入 StorageBackend 抽象
+- 增加 CsvStorage 实现
+- 保留 storage.py 兼容层
+- 为未来 SQLiteStorage 做准备
+
 ## v1.1.0
 
 - 增加配置化 Pipeline

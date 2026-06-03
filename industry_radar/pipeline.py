@@ -15,6 +15,7 @@ from .llm_client import call_deepseek_chat
 from .models import IndustryItem
 from .report import write_report
 from .storage import filter_items, read_items, write_items
+from .storage_backend import StorageBackend
 
 
 @dataclass
@@ -49,6 +50,7 @@ def run_pipeline(
     overwrite: bool = False,
     apply: bool = False,
     model: str | None = None,
+    storage: StorageBackend | None = None,
 ) -> PipelineResult:
     if limit <= 0:
         raise ValueError("--limit must be a positive integer")
@@ -65,10 +67,10 @@ def run_pipeline(
             dry_run=not apply,
         )
 
-    current_items = read_items()
+    current_items = _read_pipeline_items(storage)
     result.dedupe_result = dedupe_items(current_items)
     if apply:
-        write_items(result.dedupe_result.items)
+        _write_pipeline_items(result.dedupe_result.items, storage)
         current_items = result.dedupe_result.items
 
     if enrich:
@@ -81,9 +83,10 @@ def run_pipeline(
             overwrite=overwrite,
             apply=apply,
             model=model,
+            storage=storage,
         )
         if apply:
-            current_items = read_items()
+            current_items = _read_pipeline_items(storage)
 
     report_items = filter_items(current_items, industry=industry, since=since, until=until)
     result.report_path = report_path
@@ -103,6 +106,7 @@ def run_enrich_step(
     overwrite: bool = False,
     apply: bool = False,
     model: str | None = None,
+    storage: StorageBackend | None = None,
 ) -> PipelineEnrichResult:
     selected = filter_items(items, industry=industry, since=since, until=until)[:limit]
     result = PipelineEnrichResult(selected=len(selected))
@@ -127,5 +131,21 @@ def run_enrich_step(
 
     if apply and enriched_by_id:
         updated_items = [enriched_by_id.get(item.id, item) for item in items]
-        write_items(updated_items)
+        _write_pipeline_items(updated_items, storage)
     return result
+
+
+def _read_pipeline_items(storage: StorageBackend | None) -> list[IndustryItem]:
+    if storage is not None:
+        return storage.read_items()
+    return read_items()
+
+
+def _write_pipeline_items(
+    items: list[IndustryItem],
+    storage: StorageBackend | None,
+) -> None:
+    if storage is not None:
+        storage.write_items(items)
+        return
+    write_items(items)
