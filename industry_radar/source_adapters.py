@@ -5,9 +5,10 @@ import xml.etree.ElementTree as ET
 from datetime import date, datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any
+from urllib.parse import urlencode
 
 from .models import clean_prompt_value, normalize_industry, normalize_tags
-from .text_utils import truncate_text
+from .text_utils import clean_text, truncate_text
 
 
 USER_AGENT = "Mozilla/5.0 (compatible; ai-space-industry-radar/0.5; +https://example.com)"
@@ -37,10 +38,20 @@ class RSSSourceAdapter(SourceAdapter):
         return records
 
 
+class ArxivSourceAdapter(SourceAdapter):
+    source_type = "arxiv"
+
+    def fetch(self, source: dict, limit: int = 10) -> list[dict[str, Any]]:
+        url = build_arxiv_api_url(source, limit=limit)
+        return parse_arxiv_atom(sanitize_xml_content(read_url(url)), source)
+
+
 def get_source_adapter(source_type: str | None) -> SourceAdapter:
     normalized = clean_prompt_value(source_type).casefold() or "rss"
     if normalized in {"rss", "atom"}:
         return RSSSourceAdapter()
+    if normalized == "arxiv":
+        return ArxivSourceAdapter()
     raise ValueError(f"Unsupported source type: {source_type}")
 
 
@@ -60,7 +71,90 @@ def validate_source_config(source: dict) -> dict[str, str]:
         raise ValueError("source missing required field: industry")
     if source_type in {"rss", "atom"} and not normalized["url"]:
         raise ValueError("source missing required field: url")
+    if source_type == "arxiv":
+        normalized.update(validate_arxiv_source_fields(source))
     return normalized
+
+
+def validate_arxiv_source_fields(source: dict) -> dict[str, str]:
+    query = clean_prompt_value(str(source.get("query", "")))
+    arxiv_category = clean_prompt_value(str(source.get("arxiv_category", "")))
+    if not query and not arxiv_category:
+        raise ValueError("arxiv source requires query or arxiv_category")
+
+    sort_by = clean_prompt_value(str(source.get("sort_by", ""))) or "submittedDate"
+    sort_order = clean_prompt_value(str(source.get("sort_order", ""))) or "descending"
+    allowed_sort_by = {"relevance", "lastUpdatedDate", "submittedDate"}
+    allowed_sort_order = {"ascending", "descending"}
+    if sort_by not in allowed_sort_by:
+        raise ValueError("arxiv sort_by must be relevance, lastUpdatedDate, or submittedDate")
+    if sort_order not in allowed_sort_order:
+        raise ValueError("arxiv sort_order must be ascending or descending")
+
+    return {
+        "query": query,
+        "arxiv_category": arxiv_category,
+        "sort_by": sort_by,
+        "sort_order": sort_order,
+    }
+
+
+def build_arxiv_api_url(source: dict, limit: int = 10) -> str:
+    if limit <= 0:
+        raise ValueError("limit must be a positive integer")
+    query = clean_prompt_value(str(source.get("query", "")))
+    if not query:
+        arxiv_category = clean_prompt_value(str(source.get("arxiv_category", "")))
+        if not arxiv_category:
+            raise ValueError("arxiv source requires query or arxiv_category")
+        query = f"cat:{arxiv_category}"
+
+    params = {
+        "search_query": query,
+        "start": 0,
+        "max_results": limit,
+        "sortBy": clean_prompt_value(str(source.get("sort_by", ""))) or "submittedDate",
+        "sortOrder": clean_prompt_value(str(source.get("sort_order", ""))) or "descending",
+    }
+    return "http://export.arxiv.org/api/query?" + urlencode(params)
+
+
+def parse_arxiv_atom(xml_text: str, source: dict) -> list[dict[str, Any]]:
+    root = ET.fromstring(xml_text)
+    records = []
+    for entry in children(root, "entry"):
+        category_terms = arxiv_category_terms(entry)
+        default_tags = source.get("default_tags", "")
+        tags = normalize_tags(";".join([default_tags, *category_terms]))
+        published = child_text(entry, "published")
+        updated = child_text(entry, "updated")
+        records.append(
+            {
+                "date": parse_feed_date(published or updated),
+                "industry": source["industry"],
+                "category": source.get("category", ""),
+                "company": source["name"],
+                "title": clean_text(child_deep_text(entry, "title")),
+                "source": source["name"],
+                "source_url": child_text(entry, "id"),
+                "summary": truncate_text(child_deep_text(entry, "summary"), 800),
+                "signal": "",
+                "tags": tags,
+                "importance": 3,
+            }
+        )
+    return records
+
+
+def arxiv_category_terms(entry: ET.Element) -> list[str]:
+    terms = []
+    for child in list(entry):
+        name = local_name(child.tag)
+        if name in {"category", "primary_category"}:
+            term = clean_prompt_value(child.attrib.get("term", ""))
+            if term and term not in terms:
+                terms.append(term)
+    return terms
 
 
 def read_url(url: str, timeout: int = 15) -> bytes:
@@ -192,6 +286,13 @@ def child_text(parent: ET.Element, name: str) -> str:
     if child is None or child.text is None:
         return ""
     return clean_prompt_value(child.text)
+
+
+def child_deep_text(parent: ET.Element, name: str) -> str:
+    child = first_child(parent, name)
+    if child is None:
+        return ""
+    return clean_prompt_value(" ".join(child.itertext()))
 
 
 def atom_link(entry: ET.Element) -> str:

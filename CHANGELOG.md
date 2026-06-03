@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.4.0
+
+- 新增 ArxivSourceAdapter
+- 支持 type=arxiv 数据源
+- 支持 arXiv API query / arxiv_category 配置
+- arXiv API 结果转换为统一 IndustryItem candidate dict
+
 ## v1.3.0
 
 - 引入 Source Adapter 数据源插件架构

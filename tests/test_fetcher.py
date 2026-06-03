@@ -43,6 +43,20 @@ ATOM_XML = """\
 """
 
 
+ARXIV_XML = """\
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <id>https://arxiv.org/abs/2606.00001</id>
+    <updated>2026-06-03T08:00:00Z</updated>
+    <published>2026-06-02T17:30:00Z</published>
+    <title>Agent Research</title>
+    <summary>Agent research summary</summary>
+    <category term="cs.AI" />
+  </entry>
+</feed>
+"""
+
+
 def source_config(**overrides: str) -> dict[str, str]:
     source = {
         "name": "OpenAI Blog",
@@ -50,6 +64,19 @@ def source_config(**overrides: str) -> dict[str, str]:
         "industry": "AI",
         "category": "AI Company",
         "default_tags": "AI;Model;Company",
+    }
+    source.update(overrides)
+    return source
+
+
+def arxiv_source_config(**overrides: str) -> dict[str, str]:
+    source = {
+        "type": "arxiv",
+        "name": "arXiv AI Agent Research",
+        "query": "cat:cs.AI AND all:agent",
+        "industry": "AI",
+        "category": "Research",
+        "default_tags": "AI;Research;arXiv;Agent",
     }
     source.update(overrides)
     return source
@@ -252,6 +279,44 @@ class FetcherTest(unittest.TestCase):
             self.assertEqual(result.fetched, 1)
             self.assertEqual(result.failed, 1)
             self.assertIn("Unsupported source type", result.errors[0])
+
+    def test_fetcher_handles_arxiv_source(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            sources_path = Path(tmp_dir) / "sources.json"
+            write_sources(sources_path, [arxiv_source_config()])
+
+            with patch(
+                "industry_radar.source_adapters.read_url",
+                return_value=ARXIV_XML.encode("utf-8"),
+            ):
+                result = fetch_records(sources_path)
+
+            self.assertEqual(result.fetched, 1)
+            self.assertEqual(result.records[0]["title"], "Agent Research")
+            self.assertEqual(result.records[0]["source"], "arXiv AI Agent Research")
+
+    def test_arxiv_source_failure_does_not_stop_rss_source(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            sources_path = Path(tmp_dir) / "sources.json"
+            write_sources(
+                sources_path,
+                [
+                    arxiv_source_config(name="Broken arXiv"),
+                    source_config(type="rss", name="OpenAI Blog"),
+                ],
+            )
+
+            def fake_read_url(url: str) -> bytes:
+                if "export.arxiv.org" in url:
+                    raise RuntimeError("arxiv failed")
+                return RSS_XML.encode("utf-8")
+
+            with patch("industry_radar.source_adapters.read_url", fake_read_url):
+                result = fetch_records(sources_path)
+
+            self.assertEqual(result.fetched, 1)
+            self.assertEqual(result.failed, 1)
+            self.assertIn("arxiv failed", result.errors[0])
 
 
 if __name__ == "__main__":

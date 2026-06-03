@@ -1,5 +1,15 @@
 [
   {
+    "type": "arxiv",
+    "name": "arXiv AI Agent Research",
+    "query": "cat:cs.AI AND all:agent",
+    "industry": "AI",
+    "category": "Research",
+    "default_tags": "AI;Research;arXiv;Agent",
+    "sort_by": "submittedDate",
+    "sort_order": "descending"
+  },
+  {
     "type": "rss",
     "name": "arXiv cs.AI",
     "url": "https://rss.arxiv.org/rss/cs.AI",

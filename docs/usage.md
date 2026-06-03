@@ -31,6 +31,16 @@ python -m industry_radar fetch --sources data/sources.example.json --dry-run --l
 ```json
 [
   {
+    "type": "arxiv",
+    "name": "arXiv AI Agent Research",
+    "query": "cat:cs.AI AND all:agent",
+    "industry": "AI",
+    "category": "Research",
+    "default_tags": "AI;Research;arXiv;Agent",
+    "sort_by": "submittedDate",
+    "sort_order": "descending"
+  },
+  {
     "type": "rss",
     "name": "arXiv cs.AI",
     "url": "https://rss.arxiv.org/rss/cs.AI",
@@ -39,6 +49,23 @@ python -m industry_radar fetch --sources data/sources.example.json --dry-run --l
     "default_tags": "AI;Research;arXiv"
   }
 ]
+```
+
+也可以用 `arxiv_category` 简化 arXiv 查询：
+
+```json
+{
+  "type": "arxiv",
+  "name": "arXiv cs.AI",
+  "arxiv_category": "cs.AI",
+  "industry": "AI",
+  "category": "Research",
+  "default_tags": "AI;Research;arXiv"
+}
+```
+
+```bash
+python -m industry_radar fetch --sources data/sources.json --dry-run --limit 5
 ```
 
 ## list

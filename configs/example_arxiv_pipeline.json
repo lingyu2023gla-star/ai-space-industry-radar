@@ -1,0 +1,12 @@
+{
+  "sources": "data/sources.json",
+  "limit": 5,
+  "industry": "AI",
+  "since": null,
+  "until": null,
+  "top": 10,
+  "report": "outputs/arxiv_ai_report.md",
+  "enrich": false,
+  "overwrite": false,
+  "model": "deepseek-v4-pro"
+}
