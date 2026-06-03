@@ -274,6 +274,59 @@ class ReportCliTest(unittest.TestCase):
         self.assertIn("Dashboard generated:", output.getvalue())
         self.assertIn("Dashboard Item", html)
 
+    def test_ask_command_default_does_not_call_llm(self) -> None:
+        item = make_item(
+            item_id="1",
+            item_date="2026-06-02",
+            title="OpenAI 推进 Agent 产品化",
+            summary="Agent enterprise workflow",
+            signal="Agent 商业化加速",
+            tags="AI;Agent",
+        )
+        with patch("industry_radar.cli.read_items", return_value=[item]):
+            with patch("industry_radar.cli.call_deepseek_chat") as llm:
+                with contextlib.redirect_stdout(io.StringIO()) as output:
+                    exit_code = main(["ask", "Agent 趋势"])
+
+        self.assertEqual(exit_code, 0)
+        llm.assert_not_called()
+        self.assertIn("OpenAI 推进 Agent 产品化", output.getvalue())
+
+    def test_ask_command_llm_uses_mocked_llm(self) -> None:
+        item = make_item(
+            item_id="1",
+            item_date="2026-06-02",
+            title="OpenAI 推进 Agent 产品化",
+            summary="Agent enterprise workflow",
+            signal="Agent 商业化加速",
+            tags="AI;Agent",
+        )
+        with patch("industry_radar.cli.read_items", return_value=[item]):
+            with patch("industry_radar.cli.call_deepseek_chat", return_value="LLM answer") as llm:
+                with contextlib.redirect_stdout(io.StringIO()) as output:
+                    exit_code = main(["ask", "Agent 趋势", "--llm"])
+
+        self.assertEqual(exit_code, 0)
+        llm.assert_called_once()
+        self.assertIn("LLM answer", output.getvalue())
+
+    def test_ask_command_does_not_write_csv(self) -> None:
+        item = make_item(
+            item_id="1",
+            item_date="2026-06-02",
+            title="OpenAI 推进 Agent 产品化",
+            summary="Agent enterprise workflow",
+            signal="Agent 商业化加速",
+            tags="AI;Agent",
+        )
+        with patch("industry_radar.cli.read_items", return_value=[item]):
+            with patch("industry_radar.cli.write_items") as write_items:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    exit_code = main(["ask", "Agent 趋势"])
+
+        self.assertEqual(exit_code, 0)
+        write_items.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

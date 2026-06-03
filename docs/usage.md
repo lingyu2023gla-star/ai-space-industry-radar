@@ -201,3 +201,14 @@ python -m industry_radar dashboard
 python -m industry_radar dashboard --output outputs/dashboard.html --top 10
 python -m industry_radar dashboard --sources data/sources.json
 ```
+
+## ask
+
+基于本地知识库检索问答。
+
+```bash
+python -m industry_radar ask "最近 AI Agent 有哪些趋势？"
+python -m industry_radar ask "商业航天有哪些机会？" --industry space --top 5
+python -m industry_radar ask "多智能体有什么研究趋势？" --tag arXiv --top 3
+python -m industry_radar ask "最近 AI Agent 有哪些趋势？" --llm
+```

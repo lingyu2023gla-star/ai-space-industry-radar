@@ -441,6 +441,30 @@ python -m industry_radar dashboard \
 - 可展示数据集统计、最近事件、最近 runs 和 source health。
 - `outputs/*.html` 是本地运行产物，已被 `.gitignore` 忽略。
 
+## Local Knowledge Base / ask
+
+基于本地 CSV 数据进行检索问答：
+
+```bash
+python -m industry_radar ask "最近 AI Agent 有哪些趋势？"
+python -m industry_radar ask "商业航天有哪些机会？" --industry space --top 5
+python -m industry_radar ask "多智能体有什么研究趋势？" --tag arXiv --top 3
+```
+
+显式调用 DeepSeek 综合回答：
+
+```bash
+python -m industry_radar ask "最近 AI Agent 有哪些趋势？" --llm
+```
+
+说明：
+
+- `ask` 基于本地 CSV 数据，不会自动联网。
+- 默认使用关键词检索和本地证据生成回答。
+- 只有传入 `--llm` 才会调用 DeepSeek。
+- 结果质量取决于本地数据是否充足。
+- 当前不使用 embedding、向量数据库或外部检索。
+
 ## 报告结构
 
 `report` 会生成 Markdown 行业简报，包含：

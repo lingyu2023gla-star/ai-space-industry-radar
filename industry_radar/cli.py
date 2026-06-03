@@ -28,6 +28,12 @@ from .config import (
 )
 from .importer import import_items
 from .fetcher import fetch_and_import
+from .knowledge_base import (
+    build_ask_prompt,
+    build_documents_from_items,
+    build_retrieval_answer,
+    search_documents,
+)
 from .llm_client import call_deepseek_chat
 from .pipeline import run_pipeline
 from .report import DEFAULT_REPORT_PATH, write_report
@@ -478,6 +484,54 @@ def dashboard_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def ask_command(args: argparse.Namespace) -> int:
+    if args.top <= 0:
+        print("ask 参数错误：--top 必须是正整数。")
+        return 1
+    items = read_items()
+    documents = build_documents_from_items(items)
+    try:
+        results = search_documents(
+            args.query,
+            documents,
+            top_k=args.top,
+            industry=args.industry,
+            tag=args.tag,
+            company=args.company,
+            since=args.since,
+            until=args.until,
+        )
+    except ValueError as exc:
+        print(f"ask 参数错误：{exc}")
+        return 1
+
+    if args.llm and results:
+        try:
+            answer = call_deepseek_chat(
+                build_ask_prompt(args.query, results),
+                model=args.model,
+                response_format_json=False,
+            )
+        except ValueError as exc:
+            print(f"LLM error: {exc}")
+            return 1
+        print(answer)
+    else:
+        print(build_retrieval_answer(args.query, results))
+
+    if args.show_sources and results:
+        print("")
+        print("Sources:")
+        for index, result in enumerate(results, start=1):
+            print(
+                f"{index}. [{result['score']:.1f}] {result.get('date', '')} | "
+                f"{result.get('company', '')} | {result.get('title', '')}"
+            )
+            if result.get("source_url"):
+                print(f"   {result['source_url']}")
+    return 0
+
+
 def print_pipeline_config(config: dict) -> None:
     for key in (
         "sources",
@@ -618,6 +672,19 @@ def build_parser() -> argparse.ArgumentParser:
     dashboard_parser.add_argument("--sources", help="sources JSON 配置文件路径")
     dashboard_parser.add_argument("--title", default="AI Space Industry Radar Dashboard", help="Dashboard 标题")
     dashboard_parser.set_defaults(func=dashboard_command)
+
+    ask_parser = subparsers.add_parser("ask", help="基于本地知识库检索问答")
+    ask_parser.add_argument("query", help="问题")
+    ask_parser.add_argument("--top", type=int, default=5, help="检索结果数量，默认 5")
+    ask_parser.add_argument("--industry", help="按行业筛选")
+    ask_parser.add_argument("--tag", help="按标签筛选")
+    ask_parser.add_argument("--company", help="按公司/机构筛选")
+    ask_parser.add_argument("--since", help="只检索 date >= since 的记录，格式 YYYY-MM-DD")
+    ask_parser.add_argument("--until", help="只检索 date <= until 的记录，格式 YYYY-MM-DD")
+    ask_parser.add_argument("--llm", action="store_true", help="显式调用 DeepSeek 综合回答")
+    ask_parser.add_argument("--model", help="覆盖默认 DeepSeek 模型")
+    ask_parser.add_argument("--show-sources", action="store_true", help="显示检索证据详情")
+    ask_parser.set_defaults(func=ask_command)
 
     return parser
 

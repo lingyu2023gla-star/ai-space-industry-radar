@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.0.0
+
+- 新增 Local Knowledge Base
+- 新增 ask 命令
+- 支持本地关键词检索问答
+- 支持可选 DeepSeek 综合回答
+- 支持 industry/tag/company/date 筛选
+
 ## v1.9.0
 
 - 新增 LocalFileSourceAdapter
