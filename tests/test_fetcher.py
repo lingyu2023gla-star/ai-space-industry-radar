@@ -78,7 +78,7 @@ class FetcherTest(unittest.TestCase):
             captured["timeout"] = timeout
             return FakeResponse()
 
-        with patch("industry_radar.fetcher.urllib.request.urlopen", fake_urlopen):
+        with patch("industry_radar.source_adapters.urllib.request.urlopen", fake_urlopen):
             content = read_url("https://example.com/feed.xml", timeout=3)
 
         self.assertEqual(content, b"<rss />")
@@ -105,7 +105,7 @@ class FetcherTest(unittest.TestCase):
             sources_path = Path(tmp_dir) / "sources.json"
             write_sources(sources_path, [source_config()])
 
-            with patch("industry_radar.fetcher.read_url", return_value=b"<rss><broken></rss>"):
+            with patch("industry_radar.source_adapters.read_url", return_value=b"<rss><broken></rss>"):
                 result = fetch_records(sources_path)
 
             self.assertEqual(result.failed, 1)
@@ -171,7 +171,7 @@ class FetcherTest(unittest.TestCase):
             storage_path = Path(tmp_dir) / "industry_items.csv"
             write_sources(sources_path, [source_config()])
 
-            with patch("industry_radar.fetcher.read_url", return_value=RSS_XML.encode("utf-8")):
+            with patch("industry_radar.source_adapters.read_url", return_value=RSS_XML.encode("utf-8")):
                 result = fetch_and_import(
                     sources_path,
                     dry_run=True,
@@ -205,13 +205,53 @@ class FetcherTest(unittest.TestCase):
             storage_path = Path(tmp_dir) / "industry_items.csv"
             write_sources(sources_path, [source_config()])
 
-            with patch("industry_radar.fetcher.read_url", return_value=duplicate_rss.encode("utf-8")):
+            with patch("industry_radar.source_adapters.read_url", return_value=duplicate_rss.encode("utf-8")):
                 result = fetch_and_import(sources_path, storage_path=storage_path)
 
             self.assertEqual(result.fetched, 2)
             self.assertEqual(result.imported, 1)
             self.assertEqual(result.skipped_duplicates, 1)
             self.assertEqual(len(read_items(storage_path)), 1)
+
+    def test_fetcher_handles_sources_with_type(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            sources_path = Path(tmp_dir) / "sources.json"
+            write_sources(sources_path, [source_config(type="rss")])
+
+            with patch("industry_radar.source_adapters.read_url", return_value=RSS_XML.encode("utf-8")):
+                result = fetch_records(sources_path)
+
+            self.assertEqual(result.fetched, 1)
+            self.assertEqual(result.records[0]["title"], "OpenAI Agent update")
+
+    def test_fetcher_supports_legacy_sources_without_type(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            sources_path = Path(tmp_dir) / "sources.json"
+            write_sources(sources_path, [source_config()])
+
+            with patch("industry_radar.source_adapters.read_url", return_value=RSS_XML.encode("utf-8")):
+                result = fetch_records(sources_path)
+
+            self.assertEqual(result.fetched, 1)
+            self.assertEqual(result.failed, 0)
+
+    def test_unknown_source_type_does_not_stop_other_sources(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            sources_path = Path(tmp_dir) / "sources.json"
+            write_sources(
+                sources_path,
+                [
+                    source_config(type="unknown", name="Unknown Source"),
+                    source_config(type="rss", name="OpenAI Blog"),
+                ],
+            )
+
+            with patch("industry_radar.source_adapters.read_url", return_value=RSS_XML.encode("utf-8")):
+                result = fetch_records(sources_path)
+
+            self.assertEqual(result.fetched, 1)
+            self.assertEqual(result.failed, 1)
+            self.assertIn("Unsupported source type", result.errors[0])
 
 
 if __name__ == "__main__":

@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.3.0
+
+- 引入 Source Adapter 数据源插件架构
+- 新增 RSSSourceAdapter
+- sources.json 支持 type 字段
+- fetcher 改造为数据源编排层
+- 兼容旧 sources 配置
+
 ## v1.2.0
 
 - 引入 StorageBackend 抽象

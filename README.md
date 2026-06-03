@@ -173,6 +173,9 @@ python -m industry_radar fetch --sources data/sources.json --limit 5
 
 - `data/sources.example.json` 只提供示例源。
 - `data/sources.json` 是本地源配置，已被 `.gitignore` 忽略。
+- v1.3 引入 Source Adapter 架构，`sources.json` 支持 `type` 字段。
+- 当前实现 `RSSSourceAdapter`，`type` 可以写 `rss`；没有 `type` 时默认按 `rss` 处理。
+- 后续可扩展 `ArxivSourceAdapter`、`WebPageSourceAdapter`、`LocalFileSourceAdapter` 等数据源。
 - 单个 RSS 源失败不会中断其他源。
 - 当前版本只解析 RSS / Atom 元数据，不抓取网页正文。
 - RSS / Atom summary 会做基础文本清洗，包括去 HTML 标签、处理 HTML 实体和压缩空白。
@@ -348,6 +351,7 @@ python3 -B -m unittest discover -s tests
 - 使用 Python 标准库构建模块化 CLI 工具。
 - 设计统一 `IndustryItem` 数据模型，支撑录入、导入、采集、增强、查询和报告生成。
 - 引入 Storage Interface，当前以 `CsvStorage` 承载 CSV，预留未来 `SQLiteStorage` 扩展点。
+- 引入 Source Adapter 架构，当前以 `RSSSourceAdapter` 支持 RSS / Atom，预留更多数据源扩展点。
 - 实现 RSS / Atom、JSON、CSV 多入口数据流。
 - 实现事件级去重与字段合并，支持 URL 去重和业务事件去重。
 - 接入 DeepSeek OpenAI-compatible API 做结构化增强，生成 `summary`、`signal`、`tags`、`importance`。

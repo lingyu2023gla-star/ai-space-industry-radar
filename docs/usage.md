@@ -26,6 +26,21 @@ python -m industry_radar import --file examples/import_items.json
 python -m industry_radar fetch --sources data/sources.example.json --dry-run --limit 5
 ```
 
+`sources.json` 支持 `type` 字段；没有 `type` 时默认使用 `rss`。
+
+```json
+[
+  {
+    "type": "rss",
+    "name": "arXiv cs.AI",
+    "url": "https://rss.arxiv.org/rss/cs.AI",
+    "industry": "AI",
+    "category": "Research",
+    "default_tags": "AI;Research;arXiv"
+  }
+]
+```
+
 ## list
 
 查询已有记录。

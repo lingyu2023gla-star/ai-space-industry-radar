@@ -29,7 +29,8 @@ flowchart TD
 | `storage_backend.py` | `StorageBackend` 抽象、`CsvStorage` 实现、存储后端工厂 |
 | `storage.py` | 兼容层函数，委托给 `CsvStorage` 并保留旧调用方式 |
 | `importer.py` | JSON / CSV 批量导入、导入记录标准化、导入去重 |
-| `fetcher.py` | RSS / Atom 采集、XML 清洗解析、feed item 转换 |
+| `source_adapters.py` | 数据源适配器接口和 RSS / Atom 实现 |
+| `fetcher.py` | 数据源编排，读取 sources 配置并调用具体 Source Adapter |
 | `enricher.py` | LLM prompt 构造、增强结果解析、字段合并 |
 | `llm_client.py` | DeepSeek OpenAI-compatible API 调用 |
 | `data_governance.py` | `stats` 统计、事件级 `dedupe`、重复组合并 |
@@ -86,6 +87,26 @@ CSV 表头、兼容迁移和命令行为保持不变。
 `storage.py` 继续保留 `read_items`、`write_items`、`append_item`、`append_items`
 等旧函数，内部委托给 `CsvStorage`。这样可以避免一次性重构所有业务模块，同时为未来
 扩展 `SQLiteStorage` 留出接口。
+
+## 数据源插件化
+
+```mermaid
+flowchart TD
+    A[sources.json] --> B[validate_source_config]
+    B --> C[get_source_adapter type]
+    C --> D[RSSSourceAdapter]
+    D --> E[candidate items]
+    E --> F[importer]
+    F --> G[storage]
+```
+
+v1.3 开始，`fetcher.py` 不再直接绑定 RSS 细节，而是作为数据源编排层：
+读取 sources 配置、校验 source、选择 adapter、汇总 candidate items，并交给 importer
+做标准化、去重和写入。Adapter 不直接写 CSV，也不直接做 dedupe。
+
+当前只实现 `RSSSourceAdapter`，同时兼容 RSS item 和 Atom entry。`sources.json`
+没有 `type` 字段时默认使用 `rss`，因此旧配置仍可运行。未来可以在同一 registry 下扩展
+`ArxivSourceAdapter`、`WebPageSourceAdapter`、`LocalFileSourceAdapter`。
 
 ## 设计原则
 
