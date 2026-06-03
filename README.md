@@ -386,6 +386,31 @@ python -m industry_radar pipeline \
 - 只跳过本次 pipeline fetch，不修改 `sources.json`。
 - 适合处理长期 `403`、`429`、XML parse error 的数据源。
 
+## Static Dashboard
+
+导出静态 HTML 看板：
+
+```bash
+python -m industry_radar dashboard --output outputs/dashboard.html
+```
+
+结合 source health：
+
+```bash
+python -m industry_radar dashboard \
+  --sources data/sources.json \
+  --runs-dir runs \
+  --output outputs/dashboard.html \
+  --top 10
+```
+
+说明：
+
+- Dashboard 是静态 HTML 文件，不启动 Web 服务。
+- 不依赖第三方前端库，不请求网络，不调用 LLM。
+- 可展示数据集统计、最近事件、最近 runs 和 source health。
+- `outputs/*.html` 是本地运行产物，已被 `.gitignore` 忽略。
+
 ## 报告结构
 
 `report` 会生成 Markdown 行业简报，包含：

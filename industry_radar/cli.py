@@ -19,6 +19,7 @@ from .enricher import (
     parse_enrichment_result,
 )
 from .data_governance import build_dataset_stats, dedupe_items
+from .dashboard import build_dashboard_data, render_dashboard_html, write_dashboard_html
 from .config import (
     PIPELINE_DEFAULTS,
     load_json_config,
@@ -454,6 +455,29 @@ def source_health_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def dashboard_command(args: argparse.Namespace) -> int:
+    if args.top <= 0:
+        print("dashboard 参数错误：--top 必须是正整数。")
+        return 1
+    items = read_items()
+    run_summaries = list_run_logs(args.runs_dir, limit=args.top)
+    run_logs = load_run_logs_for_health(args.runs_dir, limit=args.top)
+    health = collect_source_health(run_logs)
+    source_names = load_source_names_from_config(args.sources)
+    if source_names:
+        health = add_config_sources_to_health(health, source_names, len(run_logs))
+    data = build_dashboard_data(
+        items,
+        run_summaries=run_summaries,
+        source_health=health,
+        top_n=args.top,
+    )
+    html_text = render_dashboard_html(data, title=args.title)
+    output_path = write_dashboard_html(html_text, args.output)
+    print(f"Dashboard generated: {output_path}")
+    return 0
+
+
 def print_pipeline_config(config: dict) -> None:
     for key in (
         "sources",
@@ -586,6 +610,14 @@ def build_parser() -> argparse.ArgumentParser:
     source_health_parser.add_argument("--limit", type=int, default=20, help="分析最近 N 条 run log，默认 20")
     source_health_parser.add_argument("--sources", help="sources JSON 配置文件路径")
     source_health_parser.set_defaults(func=source_health_command)
+
+    dashboard_parser = subparsers.add_parser("dashboard", help="导出静态 HTML Dashboard")
+    dashboard_parser.add_argument("--output", default="outputs/dashboard.html", help="输出 HTML 路径，默认 outputs/dashboard.html")
+    dashboard_parser.add_argument("--top", type=int, default=10, help="展示前 N 条，默认 10")
+    dashboard_parser.add_argument("--runs-dir", default="runs", help="运行日志目录，默认 runs")
+    dashboard_parser.add_argument("--sources", help="sources JSON 配置文件路径")
+    dashboard_parser.add_argument("--title", default="AI Space Industry Radar Dashboard", help="Dashboard 标题")
+    dashboard_parser.set_defaults(func=dashboard_command)
 
     return parser
 

@@ -10,6 +10,7 @@ __pycache__/
 
 # Generated outputs
 outputs/*.md
+outputs/*.html
 !outputs/.gitkeep
 
 # Pipeline run logs

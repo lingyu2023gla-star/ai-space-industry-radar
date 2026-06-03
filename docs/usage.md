@@ -165,3 +165,13 @@ python -m industry_radar run-show RUN_ID
 python -m industry_radar source-health
 python -m industry_radar source-health --sources data/sources.json --limit 20
 ```
+
+## dashboard
+
+导出静态 HTML Dashboard。
+
+```bash
+python -m industry_radar dashboard
+python -m industry_radar dashboard --output outputs/dashboard.html --top 10
+python -m industry_radar dashboard --sources data/sources.json
+```

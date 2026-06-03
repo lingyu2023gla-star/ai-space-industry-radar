@@ -250,6 +250,30 @@ class ReportCliTest(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertIn("arXiv cs.AI", output.getvalue())
 
+    def test_dashboard_command_generates_html_to_temp_path(self) -> None:
+        item = make_item(item_id="1", item_date="2026-06-02", title="Dashboard Item")
+        with TemporaryDirectory() as tmp_dir:
+            output_path = Path(tmp_dir) / "dashboard.html"
+            with patch("industry_radar.cli.read_items", return_value=[item]):
+                with patch("industry_radar.cli.list_run_logs", return_value=[]):
+                    with patch("industry_radar.cli.load_run_logs_for_health", return_value=[]):
+                        with contextlib.redirect_stdout(io.StringIO()) as output:
+                            exit_code = main(
+                                [
+                                    "dashboard",
+                                    "--output",
+                                    str(output_path),
+                                    "--top",
+                                    "5",
+                                ]
+                            )
+
+            html = output_path.read_text(encoding="utf-8")
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("Dashboard generated:", output.getvalue())
+        self.assertIn("Dashboard Item", html)
+
 
 if __name__ == "__main__":
     unittest.main()

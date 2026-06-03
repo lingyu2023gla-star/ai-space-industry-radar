@@ -148,6 +148,20 @@ v1.7 开始，`source_policy.py` 可以把健康分析结果转成决策：当 s
 运行日志是观测产物，不改变业务 CSV 数据。`runs/*.json` 默认不提交 Git，可以作为后续
 Web UI、Dashboard 或定时任务的基础数据。
 
+## 静态 Dashboard
+
+```mermaid
+flowchart TD
+    A[storage] --> B[dashboard.py]
+    C[runs/*.json] --> B
+    D[source_health.py] --> B
+    B --> E[outputs/dashboard.html]
+```
+
+v1.8 开始，`dashboard.py` 提供只读 HTML 输出层，聚合 CSV 数据集统计、最近事件、
+最近 runs 和 source health。Dashboard 不修改 CSV，不调用 LLM，也不请求网络；生成的
+`outputs/*.html` 默认不提交 Git。
+
 ## 设计原则
 
 - 标准库优先，降低运行和部署门槛。

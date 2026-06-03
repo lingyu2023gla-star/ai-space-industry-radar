@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.8.0
+
+- 新增 dashboard 命令
+- 支持生成静态 HTML 看板
+- 展示数据集统计、最近事件、最近 runs、source health
+- outputs/*.html 默认忽略
+
 ## v1.7.0
 
 - 新增 Source Failure Policy
