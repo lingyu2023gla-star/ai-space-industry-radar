@@ -41,17 +41,19 @@ def add_step(
     status: str,
     metrics: dict | None = None,
     errors: list | None = None,
+    details: dict | None = None,
 ) -> None:
     if status not in VALID_STEP_STATUSES:
         raise ValueError(f"invalid step status: {status}")
-    run_log.setdefault("steps", []).append(
-        {
-            "name": name,
-            "status": status,
-            "metrics": metrics or {},
-            "errors": errors or [],
-        }
-    )
+    step = {
+        "name": name,
+        "status": status,
+        "metrics": metrics or {},
+        "errors": errors or [],
+    }
+    if details is not None:
+        step["details"] = details
+    run_log.setdefault("steps", []).append(step)
 
 
 def finalize_run_log(run_log: dict) -> dict:

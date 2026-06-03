@@ -316,6 +316,10 @@ def pipeline_command(args: argparse.Namespace) -> int:
                 "enrich": True if args.enrich else None,
                 "overwrite": True if args.overwrite else None,
                 "model": args.model,
+                "skip_unhealthy_sources": True if args.skip_unhealthy_sources else None,
+                "failure_rate_threshold": args.failure_rate_threshold,
+                "min_source_runs": args.min_source_runs,
+                "runs_dir": args.runs_dir,
             }
         )
         pipeline_config = merge_pipeline_config(
@@ -336,7 +340,10 @@ def pipeline_command(args: argparse.Namespace) -> int:
             apply=apply_changes,
             model=pipeline_config["model"],
             save_run_log=args.save_run_log,
-            runs_dir=args.runs_dir,
+            runs_dir=pipeline_config["runs_dir"],
+            skip_unhealthy_sources=pipeline_config["skip_unhealthy_sources"],
+            failure_rate_threshold=pipeline_config["failure_rate_threshold"],
+            min_source_runs=pipeline_config["min_source_runs"],
         )
     except (OSError, ValueError) as exc:
         print(f"Pipeline error: {exc}")
@@ -345,6 +352,14 @@ def pipeline_command(args: argparse.Namespace) -> int:
     print(f"[Pipeline] Mode: {result.mode}")
     print("[Pipeline] Config:")
     print_pipeline_config(pipeline_config)
+    if pipeline_config["skip_unhealthy_sources"]:
+        print("[Pipeline] Source health policy:")
+        print(f"- threshold: {pipeline_config['failure_rate_threshold'] * 100:.1f}%")
+        print(f"- min_runs: {pipeline_config['min_source_runs']}")
+        print(f"- skipped sources: {len(getattr(result, 'skipped_sources', []))}")
+        for skipped in getattr(result, "skipped_sources", []):
+            print("[Pipeline] Skipped unhealthy source:")
+            print(f"- {skipped['name']}: {skipped['reason']}")
     if result.fetch_result is not None:
         print("[Pipeline] Step 1: fetch")
         print(f"Fetched: {result.fetch_result.fetched}")
@@ -440,7 +455,19 @@ def source_health_command(args: argparse.Namespace) -> int:
 
 
 def print_pipeline_config(config: dict) -> None:
-    for key in ("sources", "limit", "industry", "top", "report", "enrich", "overwrite"):
+    for key in (
+        "sources",
+        "limit",
+        "industry",
+        "top",
+        "report",
+        "enrich",
+        "overwrite",
+        "skip_unhealthy_sources",
+        "failure_rate_threshold",
+        "min_source_runs",
+        "runs_dir",
+    ):
         print(f"- {key}: {format_config_value(config.get(key))}")
 
 
@@ -538,7 +565,10 @@ def build_parser() -> argparse.ArgumentParser:
     pipeline_parser.add_argument("--dry-run", action="store_true", help="dry-run，不写 CSV 或报告")
     pipeline_parser.add_argument("--apply", action="store_true", help="允许执行写操作")
     pipeline_parser.add_argument("--save-run-log", action="store_true", help="保存 pipeline 运行日志")
-    pipeline_parser.add_argument("--runs-dir", default="runs", help="运行日志目录，默认 runs")
+    pipeline_parser.add_argument("--runs-dir", default=None, help="运行日志目录，默认 runs")
+    pipeline_parser.add_argument("--skip-unhealthy-sources", action="store_true", help="按历史失败率跳过不健康 source")
+    pipeline_parser.add_argument("--failure-rate-threshold", type=float, default=None, help="source 跳过失败率阈值，默认 0.8")
+    pipeline_parser.add_argument("--min-source-runs", type=int, default=None, help="启用跳过判断所需最小历史次数，默认 3")
     pipeline_parser.set_defaults(func=pipeline_command)
 
     runs_parser = subparsers.add_parser("runs", help="查看最近 pipeline 运行日志")

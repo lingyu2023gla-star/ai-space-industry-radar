@@ -11,10 +11,13 @@ from .enricher import (
     parse_enrichment_result,
 )
 from .fetcher import FetchResult, fetch_and_import
+from .fetcher import fetch_and_import_from_sources, load_sources
 from .llm_client import call_deepseek_chat
-from .models import IndustryItem
+from .models import IndustryItem, normalize_industry
 from .report import write_report
 from .run_logger import add_step, create_run_log, finalize_run_log, write_run_log
+from .source_health import collect_source_health, load_run_logs_for_health
+from .source_policy import filter_sources_by_health, validate_policy_params
 from .storage import filter_items, read_items, write_items
 from .storage_backend import StorageBackend
 
@@ -38,6 +41,8 @@ class PipelineResult:
     report_written: bool = False
     run_log: dict | None = None
     run_log_path: str | None = None
+    skipped_sources: list[dict] = field(default_factory=list)
+    active_source_count: int = 0
 
 
 def run_pipeline(
@@ -56,11 +61,15 @@ def run_pipeline(
     storage: StorageBackend | None = None,
     save_run_log: bool = False,
     runs_dir: str = "runs",
+    skip_unhealthy_sources: bool = False,
+    failure_rate_threshold: float = 0.8,
+    min_source_runs: int = 3,
 ) -> PipelineResult:
     if limit <= 0:
         raise ValueError("--limit must be a positive integer")
     if top is not None and top <= 0:
         raise ValueError("--top must be a positive integer")
+    validate_policy_params(failure_rate_threshold, min_source_runs)
 
     result = PipelineResult(mode="apply" if apply else "dry-run")
     run_log = create_run_log(
@@ -77,17 +86,54 @@ def run_pipeline(
             "enrich": enrich,
             "overwrite": overwrite,
             "model": model,
+            "skip_unhealthy_sources": skip_unhealthy_sources,
+            "failure_rate_threshold": failure_rate_threshold,
+            "min_source_runs": min_source_runs,
+            "runs_dir": runs_dir,
         },
     )
     result.run_log = run_log
 
     if sources_path is not None:
-        result.fetch_result = fetch_and_import(
-            sources_path,
-            limit=limit,
-            industry=industry,
-            dry_run=not apply,
-        )
+        if skip_unhealthy_sources:
+            sources = load_sources(sources_path)
+            if industry:
+                industry_value = normalize_industry(industry)
+                sources = [source for source in sources if source["industry"] == industry_value]
+            health = collect_source_health(load_run_logs_for_health(runs_dir))
+            active_sources, skipped_sources = filter_sources_by_health(
+                sources,
+                health,
+                failure_rate_threshold=failure_rate_threshold,
+                min_runs=min_source_runs,
+            )
+            result.skipped_sources = skipped_sources
+            result.active_source_count = len(active_sources)
+            add_step(
+                run_log,
+                "source_policy",
+                "success",
+                metrics={
+                    "enabled": True,
+                    "threshold": failure_rate_threshold,
+                    "min_runs": min_source_runs,
+                    "skipped_sources": len(skipped_sources),
+                    "active_sources": len(active_sources),
+                },
+                details={"skipped": skipped_sources},
+            )
+            result.fetch_result = fetch_and_import_from_sources(
+                active_sources,
+                limit=limit,
+                dry_run=not apply,
+            )
+        else:
+            result.fetch_result = fetch_and_import(
+                sources_path,
+                limit=limit,
+                industry=industry,
+                dry_run=not apply,
+            )
         add_step(
             run_log,
             "fetch",

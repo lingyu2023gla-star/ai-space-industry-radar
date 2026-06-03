@@ -66,6 +66,29 @@ class ConfigTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_pipeline_config({"enrich": "true"})
 
+    def test_validate_pipeline_config_supports_skip_unhealthy_sources(self) -> None:
+        result = validate_pipeline_config({"skip_unhealthy_sources": True})
+
+        self.assertTrue(result["skip_unhealthy_sources"])
+
+    def test_validate_pipeline_config_supports_failure_rate_threshold(self) -> None:
+        result = validate_pipeline_config({"failure_rate_threshold": 0.5})
+
+        self.assertEqual(result["failure_rate_threshold"], 0.5)
+
+    def test_validate_pipeline_config_supports_min_source_runs(self) -> None:
+        result = validate_pipeline_config({"min_source_runs": 2})
+
+        self.assertEqual(result["min_source_runs"], 2)
+
+    def test_validate_pipeline_config_rejects_invalid_failure_rate_threshold(self) -> None:
+        with self.assertRaises(ValueError):
+            validate_pipeline_config({"failure_rate_threshold": 1.5})
+
+    def test_validate_pipeline_config_rejects_invalid_min_source_runs(self) -> None:
+        with self.assertRaises(ValueError):
+            validate_pipeline_config({"min_source_runs": 0})
+
     def test_merge_pipeline_config_precedence(self) -> None:
         result = merge_pipeline_config(
             {"limit": 5, "industry": None},

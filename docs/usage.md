@@ -137,6 +137,8 @@ python -m industry_radar pipeline --config configs/example_pipeline.json
 python -m industry_radar pipeline --config configs/example_pipeline.json --apply
 python -m industry_radar pipeline --config configs/example_ai_pipeline.json --limit 10 --industry space --apply
 python -m industry_radar pipeline --config configs/example_pipeline.json --save-run-log
+python -m industry_radar pipeline --config configs/example_pipeline.json --skip-unhealthy-sources
+python -m industry_radar pipeline --config configs/example_pipeline.json --skip-unhealthy-sources --failure-rate-threshold 0.5 --min-source-runs 2
 ```
 
 ## runs

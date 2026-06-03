@@ -63,7 +63,21 @@ def fetch_records(
     industry: str | None = None,
     fallback_date: str | None = None,
 ) -> FetchResult:
-    sources = load_sources(sources_path)
+    return fetch_records_from_sources(
+        load_sources(sources_path),
+        limit=limit,
+        industry=industry,
+        fallback_date=fallback_date,
+    )
+
+
+def fetch_records_from_sources(
+    sources: list[dict[str, str]],
+    *,
+    limit: int = 10,
+    industry: str | None = None,
+    fallback_date: str | None = None,
+) -> FetchResult:
     if industry:
         industry_value = normalize_industry(industry)
         sources = [source for source in sources if source["industry"] == industry_value]
@@ -95,6 +109,26 @@ def fetch_records(
             except (TypeError, ValueError) as exc:
                 result.failed += 1
                 result.errors.append(f"Source {source['name']} item {index}: {exc}")
+    return result
+
+
+def fetch_and_import_from_sources(
+    sources: list[dict[str, str]],
+    *,
+    limit: int = 10,
+    industry: str | None = None,
+    dry_run: bool = False,
+    storage_path: Path | None = None,
+) -> FetchResult:
+    result = fetch_records_from_sources(sources, limit=limit, industry=industry)
+    if dry_run:
+        return result
+
+    import_result: ImportResult = import_records(result.records, storage_path)
+    result.imported = import_result.imported
+    result.skipped_duplicates = import_result.skipped_duplicates
+    result.failed += import_result.failed
+    result.errors.extend(import_result.errors)
     return result
 
 

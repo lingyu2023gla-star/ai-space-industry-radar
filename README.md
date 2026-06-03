@@ -358,6 +358,34 @@ python -m industry_radar source-health --sources data/sources.json --limit 20
 - 可用于发现经常失败的数据源、失败率和最近错误。
 - 如果指定 `--sources`，会展示配置中存在但最近没有失败记录的 source。
 
+## Source Failure Policy
+
+Pipeline 可以基于历史 run logs 跳过高失败率 source：
+
+```bash
+python -m industry_radar pipeline \
+  --config configs/example_pipeline.json \
+  --skip-unhealthy-sources
+```
+
+自定义阈值：
+
+```bash
+python -m industry_radar pipeline \
+  --config configs/example_pipeline.json \
+  --skip-unhealthy-sources \
+  --failure-rate-threshold 0.5 \
+  --min-source-runs 2
+```
+
+说明：
+
+- 默认不会跳过任何 source，必须显式传 `--skip-unhealthy-sources`。
+- 策略基于 `runs/*.json` 历史运行日志。
+- 没有足够历史时不会跳过。
+- 只跳过本次 pipeline fetch，不修改 `sources.json`。
+- 适合处理长期 `403`、`429`、XML parse error 的数据源。
+
 ## 报告结构
 
 `report` 会生成 Markdown 行业简报，包含：

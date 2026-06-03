@@ -160,6 +160,33 @@ class ReportCliTest(unittest.TestCase):
         self.assertEqual(run.call_args.kwargs["runs_dir"], "runs")
         self.assertIn("Run log saved: runs/example.json", output.getvalue())
 
+    def test_pipeline_source_policy_cli_arguments_pass_through(self) -> None:
+        with patch("industry_radar.cli.run_pipeline") as run:
+            run.return_value.mode = "dry-run"
+            run.return_value.fetch_result = None
+            run.return_value.dedupe_result = None
+            run.return_value.enrich_result = None
+            run.return_value.report_path = Path("outputs/pipeline_report.md")
+            run.return_value.report_written = False
+            run.return_value.run_log_path = None
+            run.return_value.skipped_sources = []
+            with contextlib.redirect_stdout(io.StringIO()):
+                exit_code = main(
+                    [
+                        "pipeline",
+                        "--skip-unhealthy-sources",
+                        "--failure-rate-threshold",
+                        "0.5",
+                        "--min-source-runs",
+                        "2",
+                    ]
+                )
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(run.call_args.kwargs["skip_unhealthy_sources"])
+        self.assertEqual(run.call_args.kwargs["failure_rate_threshold"], 0.5)
+        self.assertEqual(run.call_args.kwargs["min_source_runs"], 2)
+
     def test_runs_command_lists_run_logs(self) -> None:
         with TemporaryDirectory() as tmp_dir:
             run_log = finalize_run_log(create_run_log("pipeline", "dry-run", {}))

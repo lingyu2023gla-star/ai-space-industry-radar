@@ -153,6 +153,86 @@ class PipelineTest(unittest.TestCase):
             self.assertIsNotNone(result.run_log_path)
             self.assertTrue(Path(result.run_log_path).exists())
 
+    def test_pipeline_default_does_not_enable_source_policy(self) -> None:
+        item = make_item(item_id="1", item_date="2026-06-02")
+        with patch("industry_radar.pipeline.fetch_and_import", return_value=FetchResult()):
+            with patch("industry_radar.pipeline.load_run_logs_for_health") as load_logs:
+                with patch("industry_radar.pipeline.read_items", return_value=[item]):
+                    run_pipeline(
+                        sources_path=Path("data/sources.json"),
+                        report_path=Path("outputs/pipeline_report.md"),
+                    )
+
+        load_logs.assert_not_called()
+
+    def test_pipeline_source_policy_skips_unhealthy_source(self) -> None:
+        item = make_item(item_id="1", item_date="2026-06-02")
+        sources = [
+            {"name": "JPL News", "industry": "Commercial Space"},
+            {"name": "arXiv cs.AI", "industry": "AI"},
+        ]
+        health = {"JPL News": {"runs_seen": 3, "failure_rate": 1.0}}
+        with patch("industry_radar.pipeline.load_sources", return_value=sources):
+            with patch("industry_radar.pipeline.load_run_logs_for_health", return_value=[]):
+                with patch("industry_radar.pipeline.collect_source_health", return_value=health):
+                    with patch(
+                        "industry_radar.pipeline.fetch_and_import_from_sources",
+                        return_value=FetchResult(source_count=1),
+                    ) as fetch:
+                        with patch("industry_radar.pipeline.read_items", return_value=[item]):
+                            result = run_pipeline(
+                                sources_path=Path("data/sources.json"),
+                                report_path=Path("outputs/pipeline_report.md"),
+                                skip_unhealthy_sources=True,
+                            )
+
+        self.assertEqual(result.skipped_sources[0]["name"], "JPL News")
+        self.assertEqual(fetch.call_args.args[0], [{"name": "arXiv cs.AI", "industry": "AI"}])
+
+    def test_pipeline_source_policy_result_is_written_to_run_log(self) -> None:
+        item = make_item(item_id="1", item_date="2026-06-02")
+        sources = [{"name": "JPL News", "industry": "Commercial Space"}]
+        health = {"JPL News": {"runs_seen": 3, "failure_rate": 1.0}}
+        with patch("industry_radar.pipeline.load_sources", return_value=sources):
+            with patch("industry_radar.pipeline.load_run_logs_for_health", return_value=[]):
+                with patch("industry_radar.pipeline.collect_source_health", return_value=health):
+                    with patch(
+                        "industry_radar.pipeline.fetch_and_import_from_sources",
+                        return_value=FetchResult(source_count=0),
+                    ):
+                        with patch("industry_radar.pipeline.read_items", return_value=[item]):
+                            result = run_pipeline(
+                                sources_path=Path("data/sources.json"),
+                                report_path=Path("outputs/pipeline_report.md"),
+                                skip_unhealthy_sources=True,
+                            )
+
+        source_policy_steps = [
+            step for step in result.run_log["steps"] if step["name"] == "source_policy"
+        ]
+        self.assertEqual(source_policy_steps[0]["metrics"]["skipped_sources"], 1)
+        self.assertEqual(source_policy_steps[0]["details"]["skipped"][0]["name"], "JPL News")
+
+    def test_pipeline_source_policy_without_run_logs_does_not_skip(self) -> None:
+        item = make_item(item_id="1", item_date="2026-06-02")
+        sources = [{"name": "JPL News", "industry": "Commercial Space"}]
+        with patch("industry_radar.pipeline.load_sources", return_value=sources):
+            with patch("industry_radar.pipeline.load_run_logs_for_health", return_value=[]):
+                with patch("industry_radar.pipeline.collect_source_health", return_value={}):
+                    with patch(
+                        "industry_radar.pipeline.fetch_and_import_from_sources",
+                        return_value=FetchResult(source_count=1),
+                    ) as fetch:
+                        with patch("industry_radar.pipeline.read_items", return_value=[item]):
+                            result = run_pipeline(
+                                sources_path=Path("data/sources.json"),
+                                report_path=Path("outputs/pipeline_report.md"),
+                                skip_unhealthy_sources=True,
+                            )
+
+        self.assertEqual(result.skipped_sources, [])
+        self.assertEqual(fetch.call_args.args[0], sources)
+
     def test_pipeline_config_executes_dry_run(self) -> None:
         with TemporaryDirectory() as tmp_dir:
             config_path = Path(tmp_dir) / "pipeline.json"

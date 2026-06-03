@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.7.0
+
+- 新增 Source Failure Policy
+- pipeline 支持 --skip-unhealthy-sources
+- 支持按历史失败率跳过不健康 source
+- 支持 failure_rate_threshold 和 min_source_runs
+- run log 记录 source policy 执行结果
+
 ## v1.6.0
 
 - 新增 source-health 命令
