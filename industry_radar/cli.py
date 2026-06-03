@@ -27,6 +27,7 @@ from .config import (
     validate_pipeline_config,
 )
 from .importer import import_items
+from .importer import import_records
 from .fetcher import fetch_and_import
 from .knowledge_base import (
     build_ask_prompt,
@@ -38,6 +39,7 @@ from .knowledge_base import (
 from .llm_client import call_deepseek_chat
 from .pipeline import run_pipeline
 from .report import DEFAULT_REPORT_PATH, write_report
+from .report_ingestor import ingest_report_file
 from .retrievers import EmbeddingRetriever, KeywordRetriever, SQLiteFTSRetriever
 from .run_logger import list_run_logs, read_run_log
 from .source_health import (
@@ -159,6 +161,40 @@ def import_command(args: argparse.Namespace) -> int:
         print(f"导入参数错误：{exc}")
         return 1
 
+    print(f"Imported: {result.imported}")
+    print(f"Skipped duplicates: {result.skipped_duplicates}")
+    print(f"Failed: {result.failed}")
+    for error in result.errors:
+        print(error)
+    return 0
+
+
+def report_ingest_command(args: argparse.Namespace) -> int:
+    if args.summary_only and args.details_only:
+        print("report-ingest 参数错误：--summary-only 和 --details-only 不能同时使用。")
+        return 1
+    include_summary = not args.details_only
+    include_details = not args.summary_only
+    try:
+        candidates = ingest_report_file(
+            args.file,
+            include_summary_item=include_summary,
+            include_detail_items=include_details,
+            default_industry=args.industry,
+        )
+    except (OSError, ValueError) as exc:
+        print(f"Report ingest error: {exc}")
+        return 1
+
+    should_apply = args.apply and not args.dry_run
+    if not should_apply:
+        for candidate in candidates:
+            label = "Report item" if candidate.get("category") == "Report" else "Detail item"
+            print(f"[DRY RUN] {label}: {candidate.get('title', '')}")
+        print(f"Candidates: {len(candidates)}")
+        return 0
+
+    result = import_records(candidates)
     print(f"Imported: {result.imported}")
     print(f"Skipped duplicates: {result.skipped_duplicates}")
     print(f"Failed: {result.failed}")
@@ -353,6 +389,9 @@ def pipeline_command(args: argparse.Namespace) -> int:
             skip_unhealthy_sources=pipeline_config["skip_unhealthy_sources"],
             failure_rate_threshold=pipeline_config["failure_rate_threshold"],
             min_source_runs=pipeline_config["min_source_runs"],
+            ingest_report=args.ingest_report,
+            ingest_report_summary_only=args.ingest_report_summary_only,
+            ingest_report_details_only=args.ingest_report_details_only,
         )
     except (OSError, ValueError) as exc:
         print(f"Pipeline error: {exc}")
@@ -402,6 +441,18 @@ def pipeline_command(args: argparse.Namespace) -> int:
         print(f"周报已生成：{result.report_path}")
     else:
         print(f"Report would be generated: {result.report_path}")
+    if args.ingest_report:
+        ingest_step = report_step + 1
+        print(f"[Pipeline] Step {ingest_step}: ingest report")
+        if result.report_ingest_result is None:
+            print(f"Report ingest would run for: {result.report_path}")
+        else:
+            print(f"Candidates: {result.report_ingest_candidates}")
+            print(f"Imported: {result.report_ingest_result.imported}")
+            print(f"Skipped duplicates: {result.report_ingest_result.skipped_duplicates}")
+            print(f"Failed: {result.report_ingest_result.failed}")
+            for error in result.report_ingest_result.errors:
+                print(error)
     run_log_path = getattr(result, "run_log_path", None)
     if isinstance(run_log_path, str) and run_log_path:
         print(f"Run log saved: {run_log_path}")
@@ -620,6 +671,15 @@ def build_parser() -> argparse.ArgumentParser:
     import_parser.add_argument("--file", required=True, help="JSON 或 CSV 导入文件路径")
     import_parser.set_defaults(func=import_command)
 
+    report_ingest_parser = subparsers.add_parser("report-ingest", help="将 Markdown report 沉淀为本地 KB items")
+    report_ingest_parser.add_argument("--file", required=True, help="Markdown report 文件路径")
+    report_ingest_parser.add_argument("--summary-only", action="store_true", help="只沉淀整份报告 summary item")
+    report_ingest_parser.add_argument("--details-only", action="store_true", help="只沉淀重点条目 detail items")
+    report_ingest_parser.add_argument("--industry", default="AI", help="报告 summary item 默认行业，默认 AI")
+    report_ingest_parser.add_argument("--dry-run", action="store_true", help="只打印候选 items，不写 CSV")
+    report_ingest_parser.add_argument("--apply", action="store_true", help="写入 CSV")
+    report_ingest_parser.set_defaults(func=report_ingest_command)
+
     fetch_parser = subparsers.add_parser("fetch", help="从 RSS / Atom 源抓取行业信息")
     fetch_parser.add_argument("--sources", required=True, help="sources JSON 配置文件路径")
     fetch_parser.add_argument("--dry-run", action="store_true", help="只打印候选记录，不写入 CSV")
@@ -671,6 +731,9 @@ def build_parser() -> argparse.ArgumentParser:
     pipeline_parser.add_argument("--skip-unhealthy-sources", action="store_true", help="按历史失败率跳过不健康 source")
     pipeline_parser.add_argument("--failure-rate-threshold", type=float, default=None, help="source 跳过失败率阈值，默认 0.8")
     pipeline_parser.add_argument("--min-source-runs", type=int, default=None, help="启用跳过判断所需最小历史次数，默认 3")
+    pipeline_parser.add_argument("--ingest-report", action="store_true", help="报告生成后沉淀为本地 KB items")
+    pipeline_parser.add_argument("--ingest-report-summary-only", action="store_true", help="pipeline report ingest 只沉淀 summary item")
+    pipeline_parser.add_argument("--ingest-report-details-only", action="store_true", help="pipeline report ingest 只沉淀 detail items")
     pipeline_parser.set_defaults(func=pipeline_command)
 
     runs_parser = subparsers.add_parser("runs", help="查看最近 pipeline 运行日志")

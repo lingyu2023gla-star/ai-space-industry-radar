@@ -441,6 +441,35 @@ python -m industry_radar dashboard \
 - 可展示数据集统计、最近事件、最近 runs 和 source health。
 - `outputs/*.html` 是本地运行产物，已被 `.gitignore` 忽略。
 
+## Report-to-KB
+
+v2.4 开始，可以把生成出来的 Markdown report 重新沉淀为本地知识库条目，让 `ask`
+检索历史简报内容：
+
+```bash
+python -m industry_radar report --top 10 --output outputs/weekly.md
+python -m industry_radar report-ingest --file outputs/weekly.md --dry-run
+python -m industry_radar report-ingest --file outputs/weekly.md --apply
+```
+
+pipeline 也可以在生成报告后自动 ingest：
+
+```bash
+python -m industry_radar pipeline \
+  --config configs/example_pipeline.json \
+  --apply \
+  --ingest-report
+```
+
+说明：
+
+- `report-ingest` 默认 dry-run，只打印候选 items。
+- 只有传入 `--apply` 才会写入 CSV。
+- 支持整份报告 summary item 和重点条目 detail items。
+- 复用已有 importer / dedupe 逻辑，重复 ingest 会跳过重复记录。
+- 不调用 LLM，不请求网络。
+- `outputs/*.md` 是本地运行产物，已被 `.gitignore` 忽略。
+
 ## Local Knowledge Base / ask
 
 基于本地 CSV 数据进行检索问答：

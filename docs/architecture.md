@@ -35,6 +35,7 @@ flowchart TD
 | `llm_client.py` | DeepSeek OpenAI-compatible API 调用 |
 | `data_governance.py` | `stats` 统计、事件级 `dedupe`、重复组合并 |
 | `report.py` | Markdown 行业简报生成、排序、分布统计 |
+| `report_ingestor.py` | Markdown report 解析和 Report-to-KB 候选 items 生成 |
 | `pipeline.py` | 工作流编排，串联 fetch / dedupe / enrich / report |
 
 ## 数据流
@@ -218,6 +219,22 @@ flowchart TD
 v2.3 开始，`ask` 默认通过 citation builder 把检索结果转换为编号证据。本地回答使用
 `[1]`、`[2]` 引用证据；LLM 模式也只把编号证据传给模型，并要求模型基于证据回答。
 citation builder 不做联网验证，引用来源于本地 `IndustryItem` 的 `source` 和 `source_url`。
+
+## Report-to-KB
+
+```mermaid
+flowchart TD
+    A[report.py] --> B[outputs/weekly.md]
+    B --> C[report_ingestor.py]
+    C --> D[candidate items]
+    D --> E[importer / dedupe]
+    E --> F[storage]
+    F --> G[ask]
+```
+
+v2.4 开始，report 不只是输出文件，也可以成为后续检索语料。`report_ingestor.py`
+读取 Markdown 简报，生成报告级 summary item 和重点条目 detail items，再复用 importer
+和 dedupe 写回本地 storage。pipeline 可以通过 `--ingest-report` 在报告生成后自动沉淀。
 
 ## 设计原则
 

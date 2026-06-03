@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.4.0
+
+- 新增 report-ingest 命令
+- 支持将 Markdown report 沉淀为 IndustryItem
+- pipeline 支持 --ingest-report
+- ask 可以检索历史简报内容
+
 ## v2.3.0
 
 - ask 默认支持 citation labels

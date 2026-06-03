@@ -146,6 +146,17 @@ python -m industry_radar enrich --industry AI --limit 5 --apply
 python -m industry_radar report --top 5 --output outputs/top5_report.md
 ```
 
+## report-ingest
+
+将 Markdown report 沉淀为本地 KB items。
+
+```bash
+python -m industry_radar report-ingest --file outputs/top5_report.md --dry-run
+python -m industry_radar report-ingest --file outputs/top5_report.md --apply
+python -m industry_radar report-ingest --file outputs/top5_report.md --summary-only --dry-run
+python -m industry_radar report-ingest --file outputs/top5_report.md --details-only --dry-run
+```
+
 ## pipeline
 
 执行常用工作流。
@@ -165,6 +176,7 @@ python -m industry_radar pipeline --config configs/example_ai_pipeline.json --li
 python -m industry_radar pipeline --config configs/example_pipeline.json --save-run-log
 python -m industry_radar pipeline --config configs/example_pipeline.json --skip-unhealthy-sources
 python -m industry_radar pipeline --config configs/example_pipeline.json --skip-unhealthy-sources --failure-rate-threshold 0.5 --min-source-runs 2
+python -m industry_radar pipeline --config configs/example_pipeline.json --apply --ingest-report
 ```
 
 ## runs

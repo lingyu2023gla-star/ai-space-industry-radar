@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from industry_radar.data_governance import DedupeResult
 from industry_radar.fetcher import FetchResult
+from industry_radar.importer import ImportResult
 from industry_radar.pipeline import PipelineEnrichResult, run_pipeline
 from industry_radar.cli import main
 from tests.test_storage import make_item
@@ -106,6 +107,41 @@ class PipelineTest(unittest.TestCase):
                     run_pipeline(report_path=report_path, apply=True)
 
         self.assertEqual(write_report.call_args.args[1], report_path)
+
+    def test_pipeline_ingest_report_dry_run_does_not_write_csv(self) -> None:
+        item = make_item(item_id="1", item_date="2026-06-02")
+        with patch("industry_radar.pipeline.read_items", return_value=[item]):
+            with patch("industry_radar.pipeline.write_report") as write_report:
+                with patch("industry_radar.pipeline.import_report_candidates") as ingest:
+                    result = run_pipeline(
+                        report_path=Path("outputs/pipeline_report.md"),
+                        ingest_report=True,
+                        apply=False,
+                    )
+
+        write_report.assert_not_called()
+        ingest.assert_not_called()
+        self.assertIsNone(result.report_ingest_result)
+        self.assertTrue(any(step["name"] == "ingest_report" for step in result.run_log["steps"]))
+
+    def test_pipeline_apply_ingest_report_writes_report_items(self) -> None:
+        item = make_item(item_id="1", item_date="2026-06-02")
+        import_result = ImportResult(imported=2, skipped_duplicates=1, failed=0)
+        with patch("industry_radar.pipeline.read_items", return_value=[item]):
+            with patch("industry_radar.pipeline.write_report"):
+                with patch("industry_radar.pipeline.ingest_report_file", return_value=[{"title": "Report"}]) as build:
+                    with patch("industry_radar.pipeline.import_report_candidates", return_value=import_result) as ingest:
+                        result = run_pipeline(
+                            report_path=Path("outputs/pipeline_report.md"),
+                            ingest_report=True,
+                            apply=True,
+                        )
+
+        build.assert_called_once()
+        ingest.assert_called_once()
+        self.assertEqual(result.report_ingest_result.imported, 2)
+        ingest_steps = [step for step in result.run_log["steps"] if step["name"] == "ingest_report"]
+        self.assertEqual(ingest_steps[0]["metrics"]["imported"], 2)
 
     def test_pipeline_industry_passes_to_fetch_and_enrich(self) -> None:
         item = make_item(item_id="1", item_date="2026-06-02")

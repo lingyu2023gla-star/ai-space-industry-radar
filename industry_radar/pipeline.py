@@ -12,9 +12,11 @@ from .enricher import (
 )
 from .fetcher import FetchResult, fetch_and_import
 from .fetcher import fetch_and_import_from_sources, load_sources
+from .importer import ImportResult, build_item_fingerprint, import_records
 from .llm_client import call_deepseek_chat
 from .models import IndustryItem, normalize_industry
 from .report import write_report
+from .report_ingestor import ingest_report_file
 from .run_logger import add_step, create_run_log, finalize_run_log, write_run_log
 from .source_health import collect_source_health, load_run_logs_for_health
 from .source_policy import filter_sources_by_health, validate_policy_params
@@ -43,6 +45,8 @@ class PipelineResult:
     run_log_path: str | None = None
     skipped_sources: list[dict] = field(default_factory=list)
     active_source_count: int = 0
+    report_ingest_result: ImportResult | None = None
+    report_ingest_candidates: int = 0
 
 
 def run_pipeline(
@@ -64,12 +68,17 @@ def run_pipeline(
     skip_unhealthy_sources: bool = False,
     failure_rate_threshold: float = 0.8,
     min_source_runs: int = 3,
+    ingest_report: bool = False,
+    ingest_report_summary_only: bool = False,
+    ingest_report_details_only: bool = False,
 ) -> PipelineResult:
     if limit <= 0:
         raise ValueError("--limit must be a positive integer")
     if top is not None and top <= 0:
         raise ValueError("--top must be a positive integer")
     validate_policy_params(failure_rate_threshold, min_source_runs)
+    if ingest_report_summary_only and ingest_report_details_only:
+        raise ValueError("--ingest-report-summary-only and --ingest-report-details-only cannot both be set")
 
     result = PipelineResult(mode="apply" if apply else "dry-run")
     run_log = create_run_log(
@@ -90,6 +99,9 @@ def run_pipeline(
             "failure_rate_threshold": failure_rate_threshold,
             "min_source_runs": min_source_runs,
             "runs_dir": runs_dir,
+            "ingest_report": ingest_report,
+            "ingest_report_summary_only": ingest_report_summary_only,
+            "ingest_report_details_only": ingest_report_details_only,
         },
     )
     result.run_log = run_log
@@ -222,9 +234,72 @@ def run_pipeline(
             "written": result.report_written,
         },
     )
+
+    if ingest_report:
+        if not apply or not result.report_written:
+            add_step(
+                run_log,
+                "ingest_report",
+                "skipped",
+                metrics={
+                    "reason": "report not written",
+                    "output": str(report_path),
+                },
+            )
+        else:
+            candidates = ingest_report_file(
+                str(report_path),
+                include_summary_item=not ingest_report_details_only,
+                include_detail_items=not ingest_report_summary_only,
+                default_industry=industry or "AI",
+            )
+            result.report_ingest_candidates = len(candidates)
+            result.report_ingest_result = import_report_candidates(candidates, storage=storage)
+            add_step(
+                run_log,
+                "ingest_report",
+                status_from_failed_count(result.report_ingest_result.failed),
+                metrics={
+                    "candidates": len(candidates),
+                    "imported": result.report_ingest_result.imported,
+                    "skipped_duplicates": result.report_ingest_result.skipped_duplicates,
+                    "failed": result.report_ingest_result.failed,
+                },
+                errors=result.report_ingest_result.errors,
+            )
+
     finalize_run_log(run_log)
     if save_run_log:
         result.run_log_path = write_run_log(run_log, runs_dir=runs_dir)
+    return result
+
+
+def import_report_candidates(
+    candidates: list[dict],
+    storage: StorageBackend | None = None,
+) -> ImportResult:
+    if storage is None:
+        return import_records(candidates)
+
+    existing_items = storage.read_items()
+    fingerprints = {build_item_fingerprint(item) for item in existing_items}
+    result = ImportResult()
+    imported_items = []
+    for index, candidate in enumerate(candidates, start=1):
+        try:
+            item = IndustryItem.from_import_record(candidate)
+            fingerprint = build_item_fingerprint(item)
+            if fingerprint in fingerprints:
+                result.skipped_duplicates += 1
+                continue
+            imported_items.append(item)
+            fingerprints.add(fingerprint)
+            result.imported += 1
+        except (TypeError, ValueError) as exc:
+            result.failed += 1
+            result.errors.append(f"Record {index}: {exc}")
+    if imported_items:
+        storage.append_items(imported_items)
     return result
 
 

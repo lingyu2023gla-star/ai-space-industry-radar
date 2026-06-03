@@ -11,6 +11,29 @@ from industry_radar.run_logger import add_step, create_run_log, finalize_run_log
 from tests.test_storage import make_item
 
 
+REPORT_MARKDOWN = """# Test Weekly Brief
+
+## 概览
+
+- 记录数量：1
+
+## 重点条目
+
+#### 1. OpenAI 推进 Agent 产品化
+
+- 日期：2026-06-02
+- 行业：AI
+- 类别：Agent
+- 公司：OpenAI
+- 重要性：5/5
+- 标签：Agent;Product
+- 来源：OpenAI Blog
+- 来源链接：https://openai.com/agent-demo
+- 摘要：Agent 正在进入企业工作流。
+- 行业信号：Agent 商业化加速
+"""
+
+
 class ReportCliTest(unittest.TestCase):
     def test_report_filters_by_industry(self) -> None:
         items = [
@@ -274,6 +297,36 @@ class ReportCliTest(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertIn("Dashboard generated:", output.getvalue())
         self.assertIn("Dashboard Item", html)
+
+    def test_report_ingest_dry_run_does_not_write_csv(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            report_path = Path(tmp_dir) / "weekly.md"
+            report_path.write_text(REPORT_MARKDOWN, encoding="utf-8")
+            with patch("industry_radar.cli.import_records") as import_records:
+                with contextlib.redirect_stdout(io.StringIO()) as output:
+                    exit_code = main(["report-ingest", "--file", str(report_path), "--dry-run"])
+
+        self.assertEqual(exit_code, 0)
+        import_records.assert_not_called()
+        self.assertIn("Report item", output.getvalue())
+        self.assertIn("Detail item", output.getvalue())
+        self.assertIn("Candidates:", output.getvalue())
+
+    def test_report_ingest_apply_writes_csv(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            report_path = Path(tmp_dir) / "weekly.md"
+            report_path.write_text(REPORT_MARKDOWN, encoding="utf-8")
+            with patch("industry_radar.cli.import_records") as import_records:
+                import_records.return_value.imported = 2
+                import_records.return_value.skipped_duplicates = 0
+                import_records.return_value.failed = 0
+                import_records.return_value.errors = []
+                with contextlib.redirect_stdout(io.StringIO()) as output:
+                    exit_code = main(["report-ingest", "--file", str(report_path), "--apply"])
+
+        self.assertEqual(exit_code, 0)
+        import_records.assert_called_once()
+        self.assertIn("Imported: 2", output.getvalue())
 
     def test_ask_command_default_does_not_call_llm(self) -> None:
         item = make_item(
