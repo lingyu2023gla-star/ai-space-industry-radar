@@ -154,3 +154,12 @@ python -m industry_radar runs
 ```bash
 python -m industry_radar run-show RUN_ID
 ```
+
+## source-health
+
+基于 run logs 分析数据源健康状态。
+
+```bash
+python -m industry_radar source-health
+python -m industry_radar source-health --sources data/sources.json --limit 20
+```

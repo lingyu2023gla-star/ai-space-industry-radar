@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.6.0
+
+- 新增 source-health 命令
+- 基于 runs/*.json 聚合数据源失败率
+- 支持查看 source 最近错误和失败率
+- 支持从 sources.json 补全 source 列表
+
 ## v1.5.0
 
 - 增加 pipeline 运行日志

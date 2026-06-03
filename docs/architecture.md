@@ -126,11 +126,17 @@ flowchart TD
     B --> C[runs/*.json]
     C --> D[runs]
     C --> E[run-show]
+    C --> F[source_health.py]
+    F --> G[source-health]
 ```
 
 v1.5 开始，pipeline 不仅执行工作流，也可以在显式传入 `--save-run-log` 时记录每步指标。
 run log 覆盖 `fetch`、`dedupe`、`enrich`、`report` 的 metrics 和 errors，用于定位 source
 失败、LLM 失败、去重效果和报告生成结果。
+
+v1.6 开始，`source_health.py` 从 run logs 聚合 source 失败率、最近错误和最近状态。
+`source-health` 不请求网络，也不修改业务数据；它只读取 `runs/*.json` 和可选的
+`sources.json`，后续可以扩展成 Dashboard 或定时监控。
 
 运行日志是观测产物，不改变业务 CSV 数据。`runs/*.json` 默认不提交 Git，可以作为后续
 Web UI、Dashboard 或定时任务的基础数据。

@@ -336,6 +336,28 @@ python -m industry_radar run-show 20260603-223000-pipeline
 - run log 记录 `fetch`、`dedupe`、`enrich`、`report` 每一步的 metrics 和 errors。
 - 可用于排查 source 失败、LLM 失败、dedupe 效果和报告生成路径。
 
+## Source Health Check
+
+先运行 pipeline 并保存 run log：
+
+```bash
+python -m industry_radar pipeline --config configs/example_pipeline.json --save-run-log
+```
+
+查看数据源健康状态：
+
+```bash
+python -m industry_radar source-health
+python -m industry_radar source-health --sources data/sources.json --limit 20
+```
+
+说明：
+
+- `source-health` 基于 `runs/*.json` 运行日志分析，不会请求网络。
+- 命令不会修改 CSV 或任何业务数据。
+- 可用于发现经常失败的数据源、失败率和最近错误。
+- 如果指定 `--sources`，会展示配置中存在但最近没有失败记录的 source。
+
 ## 报告结构
 
 `report` 会生成 Markdown 行业简报，包含：

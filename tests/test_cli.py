@@ -6,7 +6,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from industry_radar.cli import main
-from industry_radar.run_logger import create_run_log, finalize_run_log, write_run_log
+from industry_radar.run_logger import add_step, create_run_log, finalize_run_log, write_run_log
 from tests.test_storage import make_item
 
 
@@ -185,6 +185,43 @@ class ReportCliTest(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertIn("run_id: test-run", output.getvalue())
         self.assertIn("summary status: success", output.getvalue())
+
+    def test_source_health_command_reads_temp_runs_dir(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            run_log = create_run_log("pipeline", "dry-run", {})
+            add_step(
+                run_log,
+                "fetch",
+                "partial_success",
+                errors=["Source JPL News: XML parse error: broken"],
+            )
+            write_run_log(finalize_run_log(run_log), runs_dir=tmp_dir)
+
+            with contextlib.redirect_stdout(io.StringIO()) as output:
+                exit_code = main(["source-health", "--runs-dir", tmp_dir])
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("JPL News", output.getvalue())
+        self.assertIn("failure_rate: 100.0%", output.getvalue())
+
+    def test_source_health_command_sources_shows_config_source(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            sources_path = Path(tmp_dir) / "sources.json"
+            sources_path.write_text('[{"name": "arXiv cs.AI"}]', encoding="utf-8")
+
+            with contextlib.redirect_stdout(io.StringIO()) as output:
+                exit_code = main(
+                    [
+                        "source-health",
+                        "--runs-dir",
+                        tmp_dir,
+                        "--sources",
+                        str(sources_path),
+                    ]
+                )
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("arXiv cs.AI", output.getvalue())
 
 
 if __name__ == "__main__":

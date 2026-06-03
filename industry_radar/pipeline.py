@@ -97,6 +97,8 @@ def run_pipeline(
                 "imported": result.fetch_result.imported,
                 "skipped_duplicates": result.fetch_result.skipped_duplicates,
                 "failed": result.fetch_result.failed,
+                "source_count": result.fetch_result.source_count,
+                "failed_sources": result.fetch_result.failed_sources,
             },
             errors=result.fetch_result.errors,
         )

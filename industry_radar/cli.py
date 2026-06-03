@@ -31,6 +31,13 @@ from .llm_client import call_deepseek_chat
 from .pipeline import run_pipeline
 from .report import DEFAULT_REPORT_PATH, write_report
 from .run_logger import list_run_logs, read_run_log
+from .source_health import (
+    add_config_sources_to_health,
+    build_source_health_report,
+    collect_source_health,
+    load_run_logs_for_health,
+    load_source_names_from_config,
+)
 from .storage import append_item, filter_items, read_items, sort_by_date_desc, write_items
 
 
@@ -419,6 +426,19 @@ def run_show_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def source_health_command(args: argparse.Namespace) -> int:
+    if args.limit <= 0:
+        print("source-health 参数错误：--limit 必须是正整数。")
+        return 1
+    run_logs = load_run_logs_for_health(args.runs_dir, limit=args.limit)
+    health = collect_source_health(run_logs)
+    source_names = load_source_names_from_config(args.sources)
+    if source_names:
+        health = add_config_sources_to_health(health, source_names, len(run_logs))
+    print(build_source_health_report(health))
+    return 0
+
+
 def print_pipeline_config(config: dict) -> None:
     for key in ("sources", "limit", "industry", "top", "report", "enrich", "overwrite"):
         print(f"- {key}: {format_config_value(config.get(key))}")
@@ -530,6 +550,12 @@ def build_parser() -> argparse.ArgumentParser:
     run_show_parser.add_argument("run_id_or_path", help="run_id 或 run log 文件路径")
     run_show_parser.add_argument("--runs-dir", default="runs", help="运行日志目录，默认 runs")
     run_show_parser.set_defaults(func=run_show_command)
+
+    source_health_parser = subparsers.add_parser("source-health", help="分析数据源健康状态")
+    source_health_parser.add_argument("--runs-dir", default="runs", help="运行日志目录，默认 runs")
+    source_health_parser.add_argument("--limit", type=int, default=20, help="分析最近 N 条 run log，默认 20")
+    source_health_parser.add_argument("--sources", help="sources JSON 配置文件路径")
+    source_health_parser.set_defaults(func=source_health_command)
 
     return parser
 

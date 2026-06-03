@@ -33,6 +33,8 @@ class FetchResult:
     imported: int = 0
     skipped_duplicates: int = 0
     failed: int = 0
+    source_count: int = 0
+    failed_sources: int = 0
     errors: list[str] = field(default_factory=list)
     records: list[dict[str, Any]] = field(default_factory=list)
 
@@ -67,6 +69,7 @@ def fetch_records(
         sources = [source for source in sources if source["industry"] == industry_value]
 
     result = FetchResult()
+    result.source_count = len(sources)
     for source in sources:
         try:
             adapter = get_source_adapter(source.get("type", "rss"))
@@ -76,10 +79,12 @@ def fetch_records(
             records = adapter.fetch(fetch_source, limit=limit)
         except ET.ParseError as exc:
             result.failed += 1
+            result.failed_sources += 1
             result.errors.append(f"Source {source['name']}: XML parse error: {exc}")
             continue
         except Exception as exc:
             result.failed += 1
+            result.failed_sources += 1
             result.errors.append(f"Source {source['name']}: {exc}")
             continue
 
