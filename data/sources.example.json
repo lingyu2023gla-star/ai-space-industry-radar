@@ -1,5 +1,23 @@
 [
   {
+    "type": "local_file",
+    "name": "AI Agent Notes",
+    "path": "examples/local_notes/ai_agent_notes.md",
+    "industry": "AI",
+    "category": "Research Notes",
+    "default_tags": "AI;Agent;Notes",
+    "mode": "single"
+  },
+  {
+    "type": "local_file",
+    "name": "AI Space Research Notes",
+    "path": "examples/local_notes/ai_space_research_notes.md",
+    "industry": "AI",
+    "category": "Research Notes",
+    "default_tags": "AI;Space;Notes",
+    "mode": "sections"
+  },
+  {
     "type": "arxiv",
     "name": "arXiv AI Agent Research",
     "query": "cat:cs.AI AND all:agent",

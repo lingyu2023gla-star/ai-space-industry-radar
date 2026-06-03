@@ -51,6 +51,32 @@ python -m industry_radar fetch --sources data/sources.example.json --dry-run --l
 ]
 ```
 
+本地 Markdown / TXT source 示例：
+
+```json
+{
+  "type": "local_file",
+  "name": "AI Agent Notes",
+  "path": "examples/local_notes/ai_agent_notes.md",
+  "industry": "AI",
+  "category": "Research Notes",
+  "default_tags": "AI;Agent;Notes",
+  "mode": "single"
+}
+```
+
+```json
+{
+  "type": "local_file",
+  "name": "AI Space Research Notes",
+  "path": "examples/local_notes/ai_space_research_notes.md",
+  "industry": "AI",
+  "category": "Research Notes",
+  "default_tags": "AI;Space;Notes",
+  "mode": "sections"
+}
+```
+
 也可以用 `arxiv_category` 简化 arXiv 查询：
 
 ```json

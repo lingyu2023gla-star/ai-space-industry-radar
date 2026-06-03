@@ -82,6 +82,20 @@ def arxiv_source_config(**overrides: str) -> dict[str, str]:
     return source
 
 
+def local_file_source_config(**overrides: str) -> dict[str, str]:
+    source = {
+        "type": "local_file",
+        "name": "AI Agent Notes",
+        "path": "notes.md",
+        "industry": "AI",
+        "category": "Research Notes",
+        "default_tags": "AI;Agent;Notes",
+        "mode": "single",
+    }
+    source.update(overrides)
+    return source
+
+
 def write_sources(path: Path, sources: list[dict[str, str]]) -> None:
     path.write_text(json.dumps(sources), encoding="utf-8")
 
@@ -317,6 +331,37 @@ class FetcherTest(unittest.TestCase):
             self.assertEqual(result.fetched, 1)
             self.assertEqual(result.failed, 1)
             self.assertIn("arxiv failed", result.errors[0])
+
+    def test_fetcher_handles_local_file_source(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            notes_path = Path(tmp_dir) / "notes.md"
+            notes_path.write_text("# AI Agent Notes\nAgent body", encoding="utf-8")
+            sources_path = Path(tmp_dir) / "sources.json"
+            write_sources(sources_path, [local_file_source_config(path=str(notes_path))])
+
+            result = fetch_records(sources_path)
+
+        self.assertEqual(result.fetched, 1)
+        self.assertEqual(result.records[0]["title"], "AI Agent Notes")
+
+    def test_local_file_failure_does_not_stop_other_source(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            notes_path = Path(tmp_dir) / "notes.md"
+            notes_path.write_text("# AI Agent Notes\nAgent body", encoding="utf-8")
+            sources_path = Path(tmp_dir) / "sources.json"
+            write_sources(
+                sources_path,
+                [
+                    local_file_source_config(name="Missing Notes", path=str(Path(tmp_dir) / "missing.md")),
+                    local_file_source_config(path=str(notes_path)),
+                ],
+            )
+
+            result = fetch_records(sources_path)
+
+        self.assertEqual(result.fetched, 1)
+        self.assertEqual(result.failed, 1)
+        self.assertIn("local file not found", result.errors[0])
 
 
 if __name__ == "__main__":

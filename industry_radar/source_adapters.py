@@ -4,10 +4,11 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import date, datetime, timezone
 from email.utils import parsedate_to_datetime
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
 
-from .models import clean_prompt_value, normalize_industry, normalize_tags
+from .models import clean_prompt_value, normalize_industry, normalize_tags, validate_date
 from .text_utils import clean_text, truncate_text
 
 
@@ -46,12 +47,33 @@ class ArxivSourceAdapter(SourceAdapter):
         return parse_arxiv_atom(sanitize_xml_content(read_url(url)), source)
 
 
+class LocalFileSourceAdapter(SourceAdapter):
+    source_type = "local_file"
+
+    def fetch(self, source: dict, limit: int = 10) -> list[dict[str, Any]]:
+        path = Path(source["path"])
+        if not path.exists():
+            raise FileNotFoundError(f"local file not found: {source['path']}")
+        text = read_text_file(str(path))
+        if source.get("mode", "single") == "sections":
+            sections = split_markdown_sections(text)
+            if sections:
+                return [
+                    local_file_section_to_import_record(title, body, source, path, index)
+                    for index, (title, body) in enumerate(sections[:limit], start=1)
+                    if clean_text(body)
+                ]
+        return [local_file_single_to_import_record(text, source, path)]
+
+
 def get_source_adapter(source_type: str | None) -> SourceAdapter:
     normalized = clean_prompt_value(source_type).casefold() or "rss"
     if normalized in {"rss", "atom"}:
         return RSSSourceAdapter()
     if normalized == "arxiv":
         return ArxivSourceAdapter()
+    if normalized in {"local_file", "file"}:
+        return LocalFileSourceAdapter()
     raise ValueError(f"Unsupported source type: {source_type}")
 
 
@@ -73,6 +95,9 @@ def validate_source_config(source: dict) -> dict[str, str]:
         raise ValueError("source missing required field: url")
     if source_type == "arxiv":
         normalized.update(validate_arxiv_source_fields(source))
+    if source_type in {"local_file", "file"}:
+        normalized.update(validate_local_file_source_fields(source))
+        normalized["type"] = "local_file"
     return normalized
 
 
@@ -96,6 +121,21 @@ def validate_arxiv_source_fields(source: dict) -> dict[str, str]:
         "arxiv_category": arxiv_category,
         "sort_by": sort_by,
         "sort_order": sort_order,
+    }
+
+
+def validate_local_file_source_fields(source: dict) -> dict[str, str]:
+    path = source.get("path")
+    if not isinstance(path, str) or not clean_prompt_value(path):
+        raise ValueError("local_file source requires path")
+    mode = clean_prompt_value(str(source.get("mode", ""))) or "single"
+    if mode not in {"single", "sections"}:
+        raise ValueError("local_file mode must be single or sections")
+    return {
+        "path": clean_prompt_value(path),
+        "mode": mode,
+        "title": clean_prompt_value(str(source.get("title", ""))),
+        "date": validate_date(str(source.get("date", ""))) if source.get("date") else "",
     }
 
 
@@ -144,6 +184,98 @@ def parse_arxiv_atom(xml_text: str, source: dict) -> list[dict[str, Any]]:
             }
         )
     return records
+
+
+def read_text_file(path: str) -> str:
+    file_path = Path(path)
+    try:
+        return file_path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        return file_path.read_text(encoding="utf-8", errors="replace")
+
+
+def extract_markdown_title(text: str, fallback: str) -> str:
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("# "):
+            title = stripped[2:].strip()
+            if title:
+                return title
+    return fallback
+
+
+def split_markdown_sections(text: str) -> list[tuple[str, str]]:
+    sections: list[tuple[str, list[str]]] = []
+    current_title = ""
+    current_lines: list[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("# ") or stripped.startswith("## "):
+            if current_title and clean_text("\n".join(current_lines)):
+                sections.append((current_title, current_lines))
+            current_title = stripped.lstrip("#").strip()
+            current_lines = []
+            continue
+        if current_title:
+            current_lines.append(line)
+    if current_title and clean_text("\n".join(current_lines)):
+        sections.append((current_title, current_lines))
+    return [(title, "\n".join(lines)) for title, lines in sections]
+
+
+def local_file_single_to_import_record(
+    text: str,
+    source: dict,
+    path: Path,
+) -> dict[str, Any]:
+    fallback_title = path.stem.replace("_", " ").replace("-", " ").strip() or path.name
+    title = source.get("title") or extract_markdown_title(text, fallback_title)
+    return local_file_record(
+        title=title,
+        body=text,
+        source=source,
+        path=path,
+        source_url=f"file://{path.resolve()}",
+    )
+
+
+def local_file_section_to_import_record(
+    title: str,
+    body: str,
+    source: dict,
+    path: Path,
+    index: int,
+) -> dict[str, Any]:
+    return local_file_record(
+        title=title,
+        body=body,
+        source=source,
+        path=path,
+        source_url=f"file://{path.resolve()}#section-{index}",
+    )
+
+
+def local_file_record(
+    *,
+    title: str,
+    body: str,
+    source: dict,
+    path: Path,
+    source_url: str,
+) -> dict[str, Any]:
+    return {
+        "date": source.get("date") or datetime.fromtimestamp(path.stat().st_mtime).date().isoformat(),
+        "industry": source["industry"],
+        "category": source.get("category", ""),
+        "company": source["name"],
+        "title": clean_text(title),
+        "source": source["name"],
+        "source_url": source_url,
+        "summary": truncate_text(body, 1000),
+        "signal": "",
+        "tags": source.get("default_tags", ""),
+        "importance": 3,
+    }
 
 
 def arxiv_category_terms(entry: ET.Element) -> list[str]:

@@ -1,14 +1,20 @@
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
 from industry_radar.source_adapters import (
     ArxivSourceAdapter,
+    LocalFileSourceAdapter,
     RSSSourceAdapter,
     build_arxiv_api_url,
+    extract_markdown_title,
     get_source_adapter,
     parse_arxiv_atom,
     parse_feed_xml,
+    read_text_file,
+    split_markdown_sections,
     validate_source_config,
 )
 
@@ -87,6 +93,20 @@ def arxiv_source_config(**overrides: str) -> dict[str, str]:
     return source
 
 
+def local_file_source_config(**overrides: str) -> dict[str, str]:
+    source = {
+        "type": "local_file",
+        "name": "AI Agent Notes",
+        "path": "notes.md",
+        "industry": "AI",
+        "category": "Research Notes",
+        "default_tags": "AI;Agent;Notes",
+        "mode": "single",
+    }
+    source.update(overrides)
+    return source
+
+
 class SourceAdaptersTest(unittest.TestCase):
     def test_get_source_adapter_rss(self) -> None:
         self.assertIsInstance(get_source_adapter("rss"), RSSSourceAdapter)
@@ -103,6 +123,12 @@ class SourceAdaptersTest(unittest.TestCase):
 
     def test_get_source_adapter_arxiv(self) -> None:
         self.assertIsInstance(get_source_adapter("arxiv"), ArxivSourceAdapter)
+
+    def test_get_source_adapter_local_file(self) -> None:
+        self.assertIsInstance(get_source_adapter("local_file"), LocalFileSourceAdapter)
+
+    def test_get_source_adapter_file_alias(self) -> None:
+        self.assertIsInstance(get_source_adapter("file"), LocalFileSourceAdapter)
 
     def test_validate_source_config_defaults_type_to_rss(self) -> None:
         source = validate_source_config(source_config())
@@ -153,6 +179,20 @@ class SourceAdaptersTest(unittest.TestCase):
     def test_validate_source_config_arxiv_invalid_sort_order_raises(self) -> None:
         with self.assertRaises(ValueError):
             validate_source_config(arxiv_source_config(sort_order="latest"))
+
+    def test_validate_source_config_accepts_local_file_config(self) -> None:
+        source = validate_source_config(local_file_source_config())
+
+        self.assertEqual(source["type"], "local_file")
+        self.assertEqual(source["mode"], "single")
+
+    def test_validate_source_config_local_file_missing_path_raises(self) -> None:
+        with self.assertRaises(ValueError):
+            validate_source_config(local_file_source_config(path=""))
+
+    def test_validate_source_config_local_file_invalid_mode_raises(self) -> None:
+        with self.assertRaises(ValueError):
+            validate_source_config(local_file_source_config(mode="chapter"))
 
     def test_build_arxiv_api_url_includes_expected_params(self) -> None:
         url = build_arxiv_api_url(validate_source_config(arxiv_source_config()), limit=5)
@@ -205,6 +245,86 @@ class SourceAdaptersTest(unittest.TestCase):
 
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0]["source"], "arXiv AI Agent Research")
+
+    def test_read_text_file_reads_utf8_file(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            path = Path(tmp_dir) / "notes.md"
+            path.write_text("hello 世界", encoding="utf-8")
+
+            self.assertEqual(read_text_file(str(path)), "hello 世界")
+
+    def test_extract_markdown_title_uses_first_level_one_heading(self) -> None:
+        self.assertEqual(extract_markdown_title("# Main Title\nBody", "fallback"), "Main Title")
+
+    def test_split_markdown_sections_splits_level_one_and_two_headings(self) -> None:
+        sections = split_markdown_sections("# Intro\nBody\n## Detail\nMore")
+
+        self.assertEqual(sections, [("Intro", "Body"), ("Detail", "More")])
+
+    def test_local_file_single_mode_generates_one_candidate(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            path = Path(tmp_dir) / "notes.md"
+            path.write_text("# AI Agent Notes\nAgent body", encoding="utf-8")
+            source = validate_source_config(local_file_source_config(path=str(path)))
+
+            records = LocalFileSourceAdapter().fetch(source)
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["source"], "AI Agent Notes")
+
+    def test_local_file_single_mode_title_comes_from_heading(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            path = Path(tmp_dir) / "notes.md"
+            path.write_text("# Heading Title\nBody", encoding="utf-8")
+            source = validate_source_config(local_file_source_config(path=str(path)))
+
+            record = LocalFileSourceAdapter().fetch(source)[0]
+
+        self.assertEqual(record["title"], "Heading Title")
+
+    def test_local_file_sections_mode_generates_multiple_candidates(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            path = Path(tmp_dir) / "notes.md"
+            path.write_text("# Intro\nBody\n## Detail\nMore", encoding="utf-8")
+            source = validate_source_config(
+                local_file_source_config(path=str(path), mode="sections")
+            )
+
+            records = LocalFileSourceAdapter().fetch(source)
+
+        self.assertEqual([record["title"] for record in records], ["Intro", "Detail"])
+
+    def test_local_file_sections_mode_limit_is_applied(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            path = Path(tmp_dir) / "notes.md"
+            path.write_text("# One\nBody\n## Two\nMore", encoding="utf-8")
+            source = validate_source_config(
+                local_file_source_config(path=str(path), mode="sections")
+            )
+
+            records = LocalFileSourceAdapter().fetch(source, limit=1)
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["title"], "One")
+
+    def test_local_file_sections_without_heading_falls_back_to_single(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            path = Path(tmp_dir) / "notes.md"
+            path.write_text("Only body", encoding="utf-8")
+            source = validate_source_config(
+                local_file_source_config(path=str(path), mode="sections")
+            )
+
+            records = LocalFileSourceAdapter().fetch(source)
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["title"], "notes")
+
+    def test_local_file_missing_file_raises_file_not_found(self) -> None:
+        source = validate_source_config(local_file_source_config(path="missing.md"))
+
+        with self.assertRaises(FileNotFoundError):
+            LocalFileSourceAdapter().fetch(source)
 
     def test_rss_source_adapter_parses_basic_rss_xml(self) -> None:
         with patch(

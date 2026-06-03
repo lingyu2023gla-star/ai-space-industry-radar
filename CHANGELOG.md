@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.9.0
+
+- 新增 LocalFileSourceAdapter
+- 支持 type=local_file 数据源
+- 支持 single / sections 两种模式
+- 支持从本地 Markdown / TXT 文件生成 candidate items
+- 新增 examples/local_notes 示例资料
+
 ## v1.8.0
 
 - 新增 dashboard 命令

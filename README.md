@@ -199,6 +199,36 @@ arXiv source 示例：
 
 也可以使用分类简写：`"arxiv_category": "cs.AI"`。
 
+## Local File Source
+
+`sources.json` 支持从本地 Markdown / TXT 文件生成 candidate items：
+
+```json
+{
+  "type": "local_file",
+  "name": "AI Agent Notes",
+  "path": "examples/local_notes/ai_agent_notes.md",
+  "industry": "AI",
+  "category": "Research Notes",
+  "default_tags": "AI;Agent;Notes",
+  "mode": "single"
+}
+```
+
+运行 dry-run：
+
+```bash
+python -m industry_radar fetch --sources data/sources.json --dry-run --limit 5
+```
+
+说明：
+
+- `mode=single` 会把整个文件作为一条行业 item。
+- `mode=sections` 会按 Markdown `#` / `##` heading 拆分为多条 item。
+- 支持 Markdown / TXT，不解析 PDF / DOCX。
+- 不调用 LLM，不请求网络。
+- local file 数据仍会进入 importer / dedupe / enrich / report 流程。
+
 ## DeepSeek 结构化增强
 
 配置 API Key：

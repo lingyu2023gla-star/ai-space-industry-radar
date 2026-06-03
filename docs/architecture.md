@@ -105,7 +105,8 @@ flowchart TD
 ```text
 SourceAdapter
 ├── RSSSourceAdapter
-└── ArxivSourceAdapter
+├── ArxivSourceAdapter
+└── LocalFileSourceAdapter
 ```
 
 v1.3 开始，`fetcher.py` 不再直接绑定 RSS 细节，而是作为数据源编排层：
@@ -113,8 +114,10 @@ v1.3 开始，`fetcher.py` 不再直接绑定 RSS 细节，而是作为数据源
 做标准化、去重和写入。Adapter 不直接写 CSV，也不直接做 dedupe。
 
 `RSSSourceAdapter` 面向 RSS / Atom feed。`ArxivSourceAdapter` 面向 arXiv API，
-支持 `query` 和 `arxiv_category` 两种配置方式。二者统一输出 candidate item dict，
-后续可以继续扩展 `WebPageSourceAdapter`、`LocalFileSourceAdapter`。
+支持 `query` 和 `arxiv_category` 两种配置方式。`LocalFileSourceAdapter` 面向本地
+Markdown / TXT，`single` 模式把整个文件作为一条行业 item，`sections` 模式按 Markdown
+heading 拆分为多条 item。所有 adapter 统一输出 candidate item dict，下游 importer /
+dedupe / enrich / report 不需要变化。
 
 旧 sources 配置没有 `type` 字段时默认使用 `rss`，因此仍可运行。
 
