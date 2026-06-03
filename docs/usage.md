@@ -212,4 +212,5 @@ python -m industry_radar ask "商业航天有哪些机会？" --industry space -
 python -m industry_radar ask "多智能体有什么研究趋势？" --tag arXiv --top 3
 python -m industry_radar ask "最近 AI Agent 有哪些趋势？" --llm
 python -m industry_radar ask "AI Agent 有哪些趋势？" --retriever embedding
+python -m industry_radar ask "AI Agent 有哪些趋势？" --retriever fts
 ```

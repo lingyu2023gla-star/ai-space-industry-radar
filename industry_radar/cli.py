@@ -36,7 +36,7 @@ from .knowledge_base import (
 from .llm_client import call_deepseek_chat
 from .pipeline import run_pipeline
 from .report import DEFAULT_REPORT_PATH, write_report
-from .retrievers import EmbeddingRetriever, KeywordRetriever
+from .retrievers import EmbeddingRetriever, KeywordRetriever, SQLiteFTSRetriever
 from .run_logger import list_run_logs, read_run_log
 from .source_health import (
     add_config_sources_to_health,
@@ -490,7 +490,12 @@ def ask_command(args: argparse.Namespace) -> int:
         return 1
     items = read_items()
     documents = build_documents_from_items(items)
-    retriever = KeywordRetriever() if args.retriever == "keyword" else EmbeddingRetriever()
+    retrievers = {
+        "keyword": KeywordRetriever,
+        "embedding": EmbeddingRetriever,
+        "fts": SQLiteFTSRetriever,
+    }
+    retriever = retrievers[args.retriever]()
     try:
         results = retriever.search(
             args.query,
@@ -504,6 +509,9 @@ def ask_command(args: argparse.Namespace) -> int:
         )
     except ValueError as exc:
         print(f"ask 参数错误：{exc}")
+        return 1
+    except RuntimeError as exc:
+        print(f"ask 检索错误：{exc}")
         return 1
 
     if args.llm and results:
@@ -687,7 +695,7 @@ def build_parser() -> argparse.ArgumentParser:
     ask_parser.add_argument("--show-sources", action="store_true", help="显示检索证据详情")
     ask_parser.add_argument(
         "--retriever",
-        choices=("keyword", "embedding"),
+        choices=("keyword", "embedding", "fts"),
         default="keyword",
         help="检索器类型，默认 keyword",
     )

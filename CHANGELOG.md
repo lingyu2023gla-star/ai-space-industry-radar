@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.2.0
+
+- 新增 SQLiteFTSRetriever
+- ask 支持 --retriever fts
+- 使用 Python sqlite3 FTS5 实现本地全文检索
+- 保持 keyword 默认检索方式不变
+
 ## v2.1.0
 
 - 新增 Retriever 抽象

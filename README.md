@@ -463,7 +463,7 @@ python -m industry_radar ask "最近 AI Agent 有哪些趋势？" --llm
 - 默认使用关键词检索和本地证据生成回答。
 - 只有传入 `--llm` 才会调用 DeepSeek。
 - 结果质量取决于本地数据是否充足。
-- 当前不使用 embedding、向量数据库或外部检索。
+- 默认不使用 embedding、向量数据库或外部检索。
 
 ## Embedding Retriever
 
@@ -482,6 +482,24 @@ python -m industry_radar ask "商业航天数据服务机会" --industry space -
 - `EmbeddingRetriever` 当前使用标准库实现的 deterministic hashing embedding。
 - 不依赖外部 embedding API，不使用向量数据库。
 - 未来可以替换为真实 `EmbeddingProvider`。
+
+## SQLite FTS Retriever
+
+v2.2 新增 `SQLiteFTSRetriever`，使用 Python 标准库 `sqlite3` 的 FTS5 能力做本地全文检索。
+默认 `ask` 仍使用 keyword retriever，也可以显式切换到 FTS：
+
+```bash
+python -m industry_radar ask "AI Agent 有哪些趋势？" --retriever fts
+python -m industry_radar ask "商业航天数据服务机会" --industry space --retriever fts --top 5
+```
+
+说明：
+
+- FTS 索引在每次 `ask` 时基于本地 CSV 临时构建在内存中。
+- `SQLiteFTSRetriever` 只负责检索，不修改 CSV，不写 outputs。
+- 不使用外部数据库服务，也不接 embedding API。
+- FTS5 支持取决于本地 Python `sqlite3` 的编译情况。
+- 如果当前环境不支持 FTS5，可以继续使用 `--retriever keyword` 或 `--retriever embedding`。
 
 ## 报告结构
 

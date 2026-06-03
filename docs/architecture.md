@@ -188,14 +188,20 @@ flowchart TD
     A[ask] --> B[BaseRetriever]
     B --> C[KeywordRetriever]
     B --> D[EmbeddingRetriever]
+    B --> G[SQLiteFTSRetriever]
     D --> E[EmbeddingProvider]
     E --> F[HashingEmbeddingProvider]
+    G --> H[sqlite3 FTS5 in-memory index]
 ```
 
 v2.1 开始，`ask` 通过 retriever 抽象执行检索。`KeywordRetriever` 复用原有 lexical
 retrieval；`EmbeddingRetriever` 当前使用本地 `HashingEmbeddingProvider`，不依赖外部
 embedding API 或向量数据库。retriever 不负责 storage，也不负责 LLM。后续可以扩展
 `OpenAIEmbeddingProvider`、`DeepSeekEmbeddingProvider` 或 `LocalModelEmbeddingProvider`。
+
+v2.2 开始，`SQLiteFTSRetriever` 使用 Python 标准库 `sqlite3` 的 FTS5 能力做本地全文检索。
+它每次 `ask` 时临时构建内存索引，只负责检索，不读取 storage，不修改 CSV，也不调用 LLM。
+如果本地 Python sqlite3 不支持 FTS5，CLI 会给出清晰错误；后续可以演进为持久化 SQLite index。
 
 ## 设计原则
 

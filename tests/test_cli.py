@@ -6,6 +6,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from industry_radar.cli import main
+from industry_radar.retrievers import is_fts5_supported
 from industry_radar.run_logger import add_step, create_run_log, finalize_run_log, write_run_log
 from tests.test_storage import make_item
 
@@ -309,6 +310,41 @@ class ReportCliTest(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         llm.assert_not_called()
         self.assertIn("OpenAI 推进 Agent 产品化", output.getvalue())
+
+    @unittest.skipUnless(is_fts5_supported(), "SQLite FTS5 is not available")
+    def test_ask_command_fts_retriever_runs_without_llm(self) -> None:
+        item = make_item(
+            item_id="1",
+            item_date="2026-06-02",
+            title="OpenAI Agent productization",
+            summary="Agent enterprise workflow",
+            signal="Agent commercialization",
+            tags="AI;Agent",
+        )
+        with patch("industry_radar.cli.read_items", return_value=[item]):
+            with patch("industry_radar.cli.call_deepseek_chat") as llm:
+                with contextlib.redirect_stdout(io.StringIO()) as output:
+                    exit_code = main(["ask", "Agent workflow", "--retriever", "fts"])
+
+        self.assertEqual(exit_code, 0)
+        llm.assert_not_called()
+        self.assertIn("OpenAI Agent productization", output.getvalue())
+
+    def test_ask_command_fts_retriever_reports_unsupported_fts5(self) -> None:
+        item = make_item(
+            item_id="1",
+            item_date="2026-06-02",
+            title="OpenAI Agent productization",
+            summary="Agent enterprise workflow",
+            tags="AI;Agent",
+        )
+        with patch("industry_radar.cli.read_items", return_value=[item]):
+            with patch("industry_radar.retrievers.is_fts5_supported", return_value=False):
+                with contextlib.redirect_stdout(io.StringIO()) as output:
+                    exit_code = main(["ask", "Agent", "--retriever", "fts"])
+
+        self.assertEqual(exit_code, 1)
+        self.assertIn("SQLite FTS5 is not supported", output.getvalue())
 
     def test_ask_command_llm_uses_mocked_llm(self) -> None:
         item = make_item(
