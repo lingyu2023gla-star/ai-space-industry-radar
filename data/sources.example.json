@@ -1,0 +1,30 @@
+[
+  {
+    "name": "arXiv cs.AI",
+    "url": "https://rss.arxiv.org/rss/cs.AI",
+    "industry": "AI",
+    "category": "Research",
+    "default_tags": "AI;Research;arXiv"
+  },
+  {
+    "name": "NASA Technology",
+    "url": "https://www.nasa.gov/technology/feed/",
+    "industry": "Commercial Space",
+    "category": "Space Technology",
+    "default_tags": "Space;NASA;Technology"
+  },
+  {
+    "name": "NASA Artemis",
+    "url": "https://www.nasa.gov/missions/artemis/feed/",
+    "industry": "Commercial Space",
+    "category": "Space Exploration",
+    "default_tags": "Space;NASA;Artemis"
+  },
+  {
+    "name": "JPL News",
+    "url": "https://www.jpl.nasa.gov/feeds/news/",
+    "industry": "Commercial Space",
+    "category": "Space News",
+    "default_tags": "Space;NASA;JPL"
+  }
+]

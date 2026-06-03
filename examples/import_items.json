@@ -1,0 +1,28 @@
+[
+  {
+    "date": "2026-06-03",
+    "industry": "AI",
+    "category": "Agent",
+    "company": "OpenAI",
+    "title": "OpenAI Agent 产品化进展",
+    "source": "OpenAI Blog",
+    "source_url": "https://example.com/openai-agent",
+    "summary": "OpenAI 推进 Agent 产品能力，显示企业级 AI 应用正在进入更明确的落地阶段。",
+    "signal": "Agent 正在成为 AI 应用商业化的重要形态。",
+    "tags": "AI;Agent;Product",
+    "importance": 5
+  },
+  {
+    "date": "2026-06-03",
+    "industry": "Commercial Space",
+    "category": "Satellite",
+    "company": "SpaceX",
+    "title": "Starlink 网络持续扩张",
+    "source": "SpaceX",
+    "source_url": "https://example.com/starlink",
+    "summary": "Starlink 持续扩展低轨卫星互联网能力，反映商业航天基础设施仍在快速演进。",
+    "signal": "低轨卫星网络仍是商业航天竞争焦点。",
+    "tags": "Space;Satellite;Internet",
+    "importance": 4
+  }
+]

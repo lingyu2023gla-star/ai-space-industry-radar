@@ -1,0 +1,26 @@
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# macOS
+.DS_Store
+
+# Generated outputs
+outputs/*.md
+!outputs/.gitkeep
+
+# Examples are intended for GitHub display
+!examples/*.csv
+!examples/*.json
+!examples/*.md
+
+# Local env
+.venv/
+.env
+!.env.example
+
+# Local RSS source config
+data/sources.json

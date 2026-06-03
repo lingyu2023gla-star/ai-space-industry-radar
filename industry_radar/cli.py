@@ -1,0 +1,438 @@
+from __future__ import annotations
+
+import argparse
+from collections.abc import Sequence
+from pathlib import Path
+
+from . import __version__
+from .models import (
+    IndustryItem,
+    clean_prompt_value,
+    normalize_importance,
+    normalize_industry,
+    normalize_tags,
+)
+from .enricher import (
+    build_enrichment_prompt,
+    merge_enrichment,
+    needs_enrichment,
+    parse_enrichment_result,
+)
+from .data_governance import build_dataset_stats, dedupe_items
+from .importer import import_items
+from .fetcher import fetch_and_import
+from .llm_client import call_deepseek_chat
+from .pipeline import run_pipeline
+from .report import DEFAULT_REPORT_PATH, write_report
+from .storage import append_item, filter_items, read_items, sort_by_date_desc, write_items
+
+
+def prompt_required(label: str) -> str:
+    while True:
+        value = clean_prompt_value(input(f"{label}: "))
+        if value:
+            return value
+        print(f"{label} 不能为空。")
+
+
+def prompt_optional(label: str) -> str:
+    return clean_prompt_value(input(f"{label}: "))
+
+
+def prompt_industry() -> str:
+    while True:
+        value = clean_prompt_value(input("Industry [AI/Commercial Space]: "))
+        if not value:
+            print("Industry 不能为空。")
+            continue
+        try:
+            return normalize_industry(value)
+        except ValueError:
+            print("Industry 仅支持 AI 或 Commercial Space。")
+
+
+def prompt_importance() -> int:
+    while True:
+        try:
+            return normalize_importance(input("Importance [1-5]: "))
+        except ValueError:
+            print("Importance 必须是 1 到 5 的整数。")
+
+
+def add_command(_args: argparse.Namespace) -> int:
+    item = IndustryItem.create(
+        industry=prompt_industry(),
+        category=prompt_required("Category"),
+        company=prompt_required("Company"),
+        title=prompt_required("Title"),
+        source=prompt_required("Source"),
+        source_url=prompt_optional("Source URL"),
+        summary=prompt_required("Summary"),
+        signal=prompt_required("Signal"),
+        tags=normalize_tags(input("Tags [separated by ;]: ")),
+        importance=prompt_importance(),
+    )
+    append_item(item)
+    print(f"已添加：{item.id}")
+    return 0
+
+
+def list_command(args: argparse.Namespace) -> int:
+    items = read_items()
+    try:
+        items = filter_items(
+            items,
+            industry=args.industry,
+            category=args.category,
+            tag=args.tag,
+            company=args.company,
+            since=args.since,
+            until=args.until,
+        )
+    except ValueError as exc:
+        print(f"筛选参数错误：{exc}")
+        return 1
+    items = sort_by_date_desc(items)[: args.limit]
+
+    if not items:
+        print("暂无记录。")
+        return 0
+
+    for item in items:
+        line = (
+            f"{item.date} | {item.industry} | {item.category} | "
+            f"{item.company} | [{item.importance}/5] {item.title}"
+        )
+        if item.tags:
+            line = f"{line} | tags: {item.tags}"
+        print(line)
+    return 0
+
+
+def report_command(args: argparse.Namespace) -> int:
+    if args.top is not None and args.top <= 0:
+        print("报告参数错误：--top 必须是正整数。")
+        return 1
+    items = read_items()
+    try:
+        items = filter_items(
+            items,
+            industry=args.industry,
+            since=args.since,
+            until=args.until,
+        )
+    except ValueError as exc:
+        print(f"筛选参数错误：{exc}")
+        return 1
+    path = write_report(items, Path(args.output), top=args.top)
+    print(f"周报已生成：{path}")
+    return 0
+
+
+def import_command(args: argparse.Namespace) -> int:
+    try:
+        result = import_items(Path(args.file))
+    except (OSError, ValueError) as exc:
+        print(f"导入参数错误：{exc}")
+        return 1
+
+    print(f"Imported: {result.imported}")
+    print(f"Skipped duplicates: {result.skipped_duplicates}")
+    print(f"Failed: {result.failed}")
+    for error in result.errors:
+        print(error)
+    return 0
+
+
+def fetch_command(args: argparse.Namespace) -> int:
+    try:
+        result = fetch_and_import(
+            Path(args.sources),
+            limit=args.limit,
+            industry=args.industry,
+            dry_run=args.dry_run,
+        )
+    except (OSError, ValueError) as exc:
+        print(f"抓取参数错误：{exc}")
+        return 1
+
+    if args.dry_run:
+        for record in result.records:
+            print(
+                f"[DRY RUN] {record['date']} | {record['industry']} | "
+                f"{record['source']} | {record['title']}"
+            )
+        for error in result.errors:
+            print(error)
+        return 0
+
+    print(f"Fetched: {result.fetched}")
+    print(f"Imported: {result.imported}")
+    print(f"Skipped duplicates: {result.skipped_duplicates}")
+    print(f"Failed: {result.failed}")
+    for error in result.errors:
+        print(error)
+    return 0
+
+
+def enrich_command(args: argparse.Namespace) -> int:
+    if args.limit <= 0:
+        print("增强参数错误：--limit 必须是正整数。")
+        return 1
+
+    all_items = read_items()
+    try:
+        selected = filter_items(
+            all_items,
+            industry=args.industry,
+            tag=args.tag,
+            company=args.company,
+            since=args.since,
+            until=args.until,
+        )
+    except ValueError as exc:
+        print(f"筛选参数错误：{exc}")
+        return 1
+    selected = selected[: args.limit]
+
+    dry_run = args.dry_run or not args.apply
+    enriched_by_id: dict[str, IndustryItem] = {}
+    enriched = 0
+    skipped = 0
+    failed = 0
+
+    for item in selected:
+        if not needs_enrichment(item, overwrite=args.overwrite):
+            skipped += 1
+            continue
+        try:
+            content = call_deepseek_chat(
+                build_enrichment_prompt(item),
+                model=args.model,
+            )
+            enrichment = parse_enrichment_result(content)
+            merged = merge_enrichment(item, enrichment, overwrite=args.overwrite)
+        except ValueError as exc:
+            failed += 1
+            print(f"Failed: {item.title}: {exc}")
+            continue
+
+        enriched += 1
+        enriched_by_id[item.id] = merged
+        if dry_run:
+            print(f"[DRY RUN] {item.title}")
+            print(f"summary: {enrichment['summary']}")
+            print(f"signal: {enrichment['signal']}")
+            print(f"tags: {enrichment['tags']}")
+            print(f"importance: {enrichment['importance']}")
+
+    if args.apply and not dry_run:
+        updated_items = [enriched_by_id.get(item.id, item) for item in all_items]
+        write_items(updated_items)
+
+    print(f"Selected: {len(selected)}")
+    print(f"Enriched: {enriched}")
+    print(f"Skipped: {skipped}")
+    print(f"Failed: {failed}")
+    return 0
+
+
+def stats_command(_args: argparse.Namespace) -> int:
+    stats = build_dataset_stats(read_items())
+    print(f"Total items: {stats['total']}")
+    print("")
+    print_counter("Industry distribution", stats["industry"])
+    print_counter("Top categories", stats["category"], limit=10)
+    print_counter("Top tags", stats["tags"], limit=10)
+    print_counter("Top companies", stats["company"], limit=10)
+    start_date, end_date = stats["date_range"]
+    print("Date range:")
+    print(f"{start_date} to {end_date}" if start_date and end_date else "N/A")
+    print("")
+    print_counter("Importance distribution", stats["importance"])
+    return 0
+
+
+def print_counter(title: str, counter, limit: int | None = None) -> None:
+    print(f"{title}:")
+    entries = counter.most_common(limit)
+    if entries:
+        for key, count in entries:
+            print(f"- {key}: {count}")
+    else:
+        print("- N/A")
+    print("")
+
+
+def dedupe_command(args: argparse.Namespace) -> int:
+    items = read_items()
+    result = dedupe_items(items)
+    should_apply = args.apply and not args.dry_run
+    if not should_apply:
+        for index, group in enumerate(result.groups, start=1):
+            print(f"Duplicate group {index}:")
+            for item in group:
+                print(
+                    f"- {item.date} | {item.industry} | {item.company} | "
+                    f"{item.title} | {item.source_url}"
+                )
+            print("")
+    else:
+        write_items(result.items)
+
+    print(f"Duplicate groups: {result.duplicate_groups}")
+    print(f"Removed duplicates: {result.removed_duplicates}")
+    print(f"Remaining items: {result.remaining_items}")
+    return 0
+
+
+def pipeline_command(args: argparse.Namespace) -> int:
+    apply_changes = args.apply and not args.dry_run
+    try:
+        result = run_pipeline(
+            sources_path=Path(args.sources) if args.sources else None,
+            limit=args.limit,
+            industry=args.industry,
+            since=args.since,
+            until=args.until,
+            report_path=Path(args.report),
+            top=args.top,
+            enrich=args.enrich,
+            overwrite=args.overwrite,
+            apply=apply_changes,
+        )
+    except (OSError, ValueError) as exc:
+        print(f"Pipeline error: {exc}")
+        return 1
+
+    print(f"[Pipeline] Mode: {result.mode}")
+    if result.fetch_result is not None:
+        print("[Pipeline] Step 1: fetch")
+        print(f"Fetched: {result.fetch_result.fetched}")
+        print(f"Imported: {result.fetch_result.imported}")
+        print(f"Skipped duplicates: {result.fetch_result.skipped_duplicates}")
+        print(f"Failed: {result.fetch_result.failed}")
+        for error in result.fetch_result.errors:
+            print(error)
+    else:
+        print("[Pipeline] Step 1: fetch skipped")
+
+    print("[Pipeline] Step 2: dedupe")
+    if result.dedupe_result is not None:
+        print(f"Duplicate groups: {result.dedupe_result.duplicate_groups}")
+        print(f"Removed duplicates: {result.dedupe_result.removed_duplicates}")
+        print(f"Remaining items: {result.dedupe_result.remaining_items}")
+
+    if args.enrich:
+        print("[Pipeline] Step 3: enrich")
+        if result.enrich_result is not None:
+            print(f"Selected: {result.enrich_result.selected}")
+            print(f"Enriched: {result.enrich_result.enriched}")
+            print(f"Skipped: {result.enrich_result.skipped}")
+            print(f"Failed: {result.enrich_result.failed}")
+            for error in result.enrich_result.errors:
+                print(error)
+
+    report_step = 4 if args.enrich else 3
+    print(f"[Pipeline] Step {report_step}: report")
+    if result.report_written:
+        print(f"周报已生成：{result.report_path}")
+    else:
+        print(f"Report would be generated: {result.report_path}")
+    return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="industry_radar",
+        description="AI 与商业航天行业调研雷达 MVP",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"industry-radar {__version__}",
+    )
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    add_parser = subparsers.add_parser("add", help="交互式添加一条行业信息")
+    add_parser.set_defaults(func=add_command)
+
+    list_parser = subparsers.add_parser("list", help="展示行业信息")
+    list_parser.add_argument("--industry", help="按行业筛选")
+    list_parser.add_argument("--category", help="按分类筛选")
+    list_parser.add_argument("--tag", help="按标签筛选")
+    list_parser.add_argument("--company", help="按公司/机构筛选，支持包含匹配")
+    list_parser.add_argument("--since", help="只展示 date >= since 的记录，格式 YYYY-MM-DD")
+    list_parser.add_argument("--until", help="只展示 date <= until 的记录，格式 YYYY-MM-DD")
+    list_parser.add_argument("--limit", type=int, default=10, help="展示条数，默认 10")
+    list_parser.set_defaults(func=list_command)
+
+    report_parser = subparsers.add_parser("report", help="生成 Markdown 周报")
+    report_parser.add_argument("--industry", help="按行业筛选")
+    report_parser.add_argument("--since", help="只纳入 date >= since 的记录，格式 YYYY-MM-DD")
+    report_parser.add_argument("--until", help="只纳入 date <= until 的记录，格式 YYYY-MM-DD")
+    report_parser.add_argument("--top", type=int, help="只输出排序后的前 N 条")
+    report_parser.add_argument(
+        "--output",
+        default=str(DEFAULT_REPORT_PATH),
+        help="输出文件路径，默认 outputs/weekly_report.md",
+    )
+    report_parser.set_defaults(func=report_command)
+
+    import_parser = subparsers.add_parser("import", help="批量导入行业信息")
+    import_parser.add_argument("--file", required=True, help="JSON 或 CSV 导入文件路径")
+    import_parser.set_defaults(func=import_command)
+
+    fetch_parser = subparsers.add_parser("fetch", help="从 RSS / Atom 源抓取行业信息")
+    fetch_parser.add_argument("--sources", required=True, help="sources JSON 配置文件路径")
+    fetch_parser.add_argument("--dry-run", action="store_true", help="只打印候选记录，不写入 CSV")
+    fetch_parser.add_argument("--limit", type=int, default=10, help="每个 source 最多读取条数，默认 10")
+    fetch_parser.add_argument("--industry", help="只抓取指定行业的 source")
+    fetch_parser.set_defaults(func=fetch_command)
+
+    enrich_parser = subparsers.add_parser("enrich", help="使用 DeepSeek 增强行业信息")
+    enrich_parser.add_argument("--limit", type=int, default=5, help="处理条数，默认 5")
+    enrich_parser.add_argument("--industry", help="按行业筛选")
+    enrich_parser.add_argument("--tag", help="按标签筛选")
+    enrich_parser.add_argument("--company", help="按公司/机构筛选，支持包含匹配")
+    enrich_parser.add_argument("--since", help="只增强 date >= since 的记录，格式 YYYY-MM-DD")
+    enrich_parser.add_argument("--until", help="只增强 date <= until 的记录，格式 YYYY-MM-DD")
+    enrich_parser.add_argument("--dry-run", action="store_true", help="只打印增强结果，不写回 CSV")
+    enrich_parser.add_argument("--apply", action="store_true", help="写回 CSV")
+    enrich_parser.add_argument("--overwrite", action="store_true", help="覆盖已有增强字段")
+    enrich_parser.add_argument("--model", help="覆盖默认 DeepSeek 模型")
+    enrich_parser.set_defaults(func=enrich_command)
+
+    stats_parser = subparsers.add_parser("stats", help="查看数据集统计")
+    stats_parser.set_defaults(func=stats_command)
+
+    dedupe_parser = subparsers.add_parser("dedupe", help="清理已有 CSV 中的重复记录")
+    dedupe_parser.add_argument("--dry-run", action="store_true", help="预览重复组，不写回 CSV")
+    dedupe_parser.add_argument("--apply", action="store_true", help="执行合并去重并写回 CSV")
+    dedupe_parser.set_defaults(func=dedupe_command)
+
+    pipeline_parser = subparsers.add_parser("pipeline", help="执行 fetch/dedupe/enrich/report 工作流")
+    pipeline_parser.add_argument("--sources", help="RSS sources 配置文件路径")
+    pipeline_parser.add_argument("--limit", type=int, default=5, help="每个 source 抓取条数，默认 5")
+    pipeline_parser.add_argument("--industry", help="按行业筛选")
+    pipeline_parser.add_argument("--since", help="用于 enrich/report 的起始日期，格式 YYYY-MM-DD")
+    pipeline_parser.add_argument("--until", help="用于 enrich/report 的截止日期，格式 YYYY-MM-DD")
+    pipeline_parser.add_argument(
+        "--report",
+        default="outputs/pipeline_report.md",
+        help="报告输出路径，默认 outputs/pipeline_report.md",
+    )
+    pipeline_parser.add_argument("--top", type=int, help="报告输出前 N 条")
+    pipeline_parser.add_argument("--enrich", action="store_true", help="执行 DeepSeek enrich")
+    pipeline_parser.add_argument("--overwrite", action="store_true", help="传给 enrich，覆盖已有字段")
+    pipeline_parser.add_argument("--dry-run", action="store_true", help="dry-run，不写 CSV 或报告")
+    pipeline_parser.add_argument("--apply", action="store_true", help="允许执行写操作")
+    pipeline_parser.set_defaults(func=pipeline_command)
+
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    return args.func(args)

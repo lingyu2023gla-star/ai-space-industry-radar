@@ -1,0 +1,4 @@
+id,date,industry,category,company,title,source,source_url,summary,signal,tags,importance,created_at,updated_at
+sample-ai-001,2026-06-03,AI,Agent,OpenAI,OpenAI Agent 产品化进展,OpenAI Blog,https://example.com/openai-agent,OpenAI 推进 Agent 产品能力，显示企业级 AI 应用正在进入更明确的落地阶段。,Agent 正在成为 AI 应用商业化的重要形态。,AI;Agent;Product,5,2026-06-03T10:00:00,2026-06-03T10:00:00
+sample-space-001,2026-06-03,Commercial Space,Satellite,SpaceX,Starlink 网络持续扩张,SpaceX,https://example.com/starlink,Starlink 持续扩展低轨卫星互联网能力，反映商业航天基础设施仍在快速演进。,低轨卫星网络仍是商业航天竞争焦点。,Space;Satellite;Internet,4,2026-06-03T10:05:00,2026-06-03T10:05:00
+sample-ai-002,2026-06-02,AI,Research,arXiv cs.AI,多智能体研究进展,arXiv cs.AI,https://example.com/arxiv-ai,新的多智能体研究关注协作、规划和工具使用。,Agent 能力演进仍受到研究社区推动。,AI;Research;Multi-Agent,3,2026-06-03T10:10:00,2026-06-03T10:10:00
