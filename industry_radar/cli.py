@@ -54,6 +54,12 @@ from .research_collection import (
     resolve_research_path,
     write_research_session,
 )
+from .research_exporter import (
+    build_export_manifest,
+    export_research_pack,
+    select_research_sessions,
+    summarize_export_result,
+)
 from .research_index import (
     build_research_collection_stats,
     build_research_documents,
@@ -870,6 +876,76 @@ def research_stats_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def research_export_command(args: argparse.Namespace) -> int:
+    if args.id and args.query:
+        print("research-export 参数错误：Use either --id or --query, not both.")
+        return 1
+    if args.ingested and args.not_ingested:
+        print("research-export 参数错误：--ingested 和 --not-ingested 不能同时使用。")
+        return 1
+    if args.top is not None and args.top <= 0:
+        print("research-export 参数错误：--top 必须是正整数。")
+        return 1
+
+    ingested = True if args.ingested else False if args.not_ingested else None
+    warnings = []
+    try:
+        sessions = select_research_sessions(
+            research_dir=args.research_dir,
+            query=args.query,
+            research_ids=args.id,
+            retriever=args.retriever,
+            ingested=ingested,
+            since=args.since,
+            until=args.until,
+            top_k=args.top,
+        )
+    except ValueError as exc:
+        print(f"research-export 参数错误：{exc}")
+        return 1
+
+    if args.id:
+        selected_ids = {str(session.get("research_id", "")) for session in sessions}
+        for research_id in args.id:
+            if research_id not in selected_ids:
+                warnings.append(f"Research session not found: {research_id}")
+
+    if not sessions:
+        print("No research sessions selected.")
+        return 0
+
+    filters = {
+        "research_ids": args.id or [],
+        "retriever": args.retriever,
+        "ingested": ingested,
+        "since": args.since,
+        "until": args.until,
+        "top": args.top,
+    }
+    if not args.apply or args.dry_run:
+        print(f"[DRY RUN] Research sessions selected: {len(sessions)}")
+        for session in sessions:
+            print(f"- {session.get('research_id', '')} | {session.get('query', '')}")
+        if warnings:
+            print("Warnings:")
+            for warning in warnings:
+                print(f"- {warning}")
+        print(f"Output would be: {args.output}")
+        return 0
+
+    output_path = export_research_pack(
+        sessions,
+        args.output,
+        export_name=args.name,
+        query=args.query,
+        filters=filters,
+        warnings=warnings,
+    )
+    manifest = build_export_manifest(sessions, args.name, query=args.query, filters=filters, warnings=warnings)
+    print(summarize_export_result(output_path, manifest))
+    return 0
+
+
 def resolve_research_markdown_input(value: str, research_dir: str) -> Path:
     direct_path = Path(value)
     if direct_path.exists():
@@ -1145,6 +1221,23 @@ def build_parser() -> argparse.ArgumentParser:
     research_stats_parser = subparsers.add_parser("research-stats", help="查看 research collection 统计")
     research_stats_parser.add_argument("--research-dir", default="research", help="research collection 目录，默认 research")
     research_stats_parser.set_defaults(func=research_stats_command)
+
+    research_export_parser = subparsers.add_parser("research-export", help="导出 research sessions 为 zip 研究包")
+    research_export_parser.add_argument("--research-dir", default="research", help="research collection 目录，默认 research")
+    research_export_parser.add_argument("--output", default="exports/research_pack.zip", help="输出 zip 路径，默认 exports/research_pack.zip")
+    research_export_parser.add_argument("--name", default="research_pack", help="导出包名称，默认 research_pack")
+    research_export_parser.add_argument("--query", help="按主题搜索 research sessions")
+    research_export_parser.add_argument("--id", action="append", help="按 research_id 精确导出，可重复传入")
+    research_export_parser.add_argument("--retriever", help="按 retriever 筛选")
+    export_ingest_group = research_export_parser.add_mutually_exclusive_group()
+    export_ingest_group.add_argument("--ingested", action="store_true", help="只导出已沉淀 sessions")
+    export_ingest_group.add_argument("--not-ingested", action="store_true", help="只导出未沉淀 sessions")
+    research_export_parser.add_argument("--since", help="只导出 created_at 日期 >= since 的 sessions，格式 YYYY-MM-DD")
+    research_export_parser.add_argument("--until", help="只导出 created_at 日期 <= until 的 sessions，格式 YYYY-MM-DD")
+    research_export_parser.add_argument("--top", type=int, help="限制导出数量")
+    research_export_parser.add_argument("--dry-run", action="store_true", help="只预览，不写 zip")
+    research_export_parser.add_argument("--apply", action="store_true", help="实际写 zip")
+    research_export_parser.set_defaults(func=research_export_command)
 
     return parser
 

@@ -43,6 +43,9 @@ def build_research_documents(research_dir: str = "research") -> list[dict]:
             "llm_enabled": bool(metadata.get("llm_enabled", False)),
             "ingested": bool(metadata.get("ingested", False)),
             "output_path": str(metadata.get("output_path") or markdown_path),
+            "markdown_path": str(markdown_path),
+            "metadata_path": str(metadata_path),
+            "markdown_missing": not markdown_path.exists(),
             "markdown": markdown,
         }
         doc["text"] = build_document_text(doc, metadata)

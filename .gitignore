@@ -22,6 +22,12 @@ research/*.md
 research/*.json
 !research/.gitkeep
 
+# Research export artifacts
+exports/*.zip
+exports/*.tar
+exports/*.tar.gz
+!exports/.gitkeep
+
 # Examples are intended for GitHub display
 !examples/*.csv
 !examples/*.json

@@ -284,3 +284,14 @@ python -m industry_radar research-search "AI Agent" --since 2026-01-01 --top 5
 ```bash
 python -m industry_radar research-stats
 ```
+
+## research-export
+
+导出 research sessions 为 zip 研究包。默认 dry-run，`--apply` 才会写入 zip。
+
+```bash
+python -m industry_radar research-export --query "AI Agent" --output exports/ai_agent_pack.zip
+python -m industry_radar research-export --query "AI Agent" --output exports/ai_agent_pack.zip --apply
+python -m industry_radar research-export --id 20260603-223000-ai-agent-commercialization --output exports/one_session.zip --apply
+python -m industry_radar research-export --query "商业航天" --not-ingested --top 5 --apply
+```

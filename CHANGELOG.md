@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.8.0
+
+- 新增 research-export 命令
+- 支持导出 research sessions 为 zip 研究包
+- 支持 query / id / retriever / ingested / date range 筛选
+- 导出包包含 manifest.json、README.md、research Markdown 和 metadata
+
 ## v2.7.0
 
 - 新增 research-search 命令

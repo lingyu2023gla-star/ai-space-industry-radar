@@ -559,6 +559,40 @@ python -m industry_radar research-stats
 - 两个命令都不调用 LLM，不请求网络，不修改 KB。
 - `research/*.md` 和 `research/*.json` 仍然是本地产物，不提交 Git。
 
+## Export Research Pack
+
+`research-export` 可以把多个 research sessions 打包为 zip 研究包，方便归档和分享。
+
+```bash
+python -m industry_radar research-export \
+  --query "AI Agent" \
+  --output exports/ai_agent_pack.zip
+
+python -m industry_radar research-export \
+  --query "AI Agent" \
+  --output exports/ai_agent_pack.zip \
+  --apply
+
+python -m industry_radar research-export \
+  --id 20260603-223000-ai-agent-commercialization \
+  --output exports/one_session.zip \
+  --apply
+
+python -m industry_radar research-export \
+  --query "商业航天" \
+  --not-ingested \
+  --top 5 \
+  --apply
+```
+
+说明：
+
+- 支持按 `--query`、`--id`、`--retriever`、`--ingested`、`--not-ingested`、`--since`、`--until` 筛选。
+- 默认 dry-run，只展示将导出的 sessions。
+- 只有传入 `--apply` 才会写入 zip。
+- 导出包包含 `manifest.json`、`README.md`、`research/*.md` 和 `research/*.json`。
+- `exports/*.zip` 是本地导出产物，已被 `.gitignore` 忽略。
+
 ## Local Knowledge Base / ask
 
 基于本地 CSV 数据进行检索问答：

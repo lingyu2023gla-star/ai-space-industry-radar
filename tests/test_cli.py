@@ -1,6 +1,7 @@
 import unittest
 import contextlib
 import io
+import zipfile
 from types import SimpleNamespace
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -779,6 +780,88 @@ class ReportCliTest(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertEqual(after_metadata, before_metadata)
         self.assertEqual(after_markdown, before_markdown)
+
+    def test_research_export_dry_run_does_not_write_zip(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            research_dir = Path(tmp_dir) / "research"
+            output_path = Path(tmp_dir) / "pack.zip"
+            metadata = create_research_metadata("session-1", "AI Agent trend", "", "keyword", 5, {}, 1, False)
+            write_research_session("# Research Session: AI Agent", metadata, research_dir=str(research_dir))
+
+            with contextlib.redirect_stdout(io.StringIO()) as output:
+                exit_code = main(
+                    [
+                        "research-export",
+                        "--query",
+                        "AI Agent",
+                        "--research-dir",
+                        str(research_dir),
+                        "--output",
+                        str(output_path),
+                    ]
+                )
+
+        self.assertEqual(exit_code, 0)
+        self.assertFalse(output_path.exists())
+        self.assertIn("[DRY RUN] Research sessions selected: 1", output.getvalue())
+
+    def test_research_export_apply_writes_zip(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            research_dir = Path(tmp_dir) / "research"
+            output_path = Path(tmp_dir) / "pack.zip"
+            metadata = create_research_metadata("session-1", "AI Agent trend", "", "keyword", 5, {}, 1, False)
+            write_research_session("# Research Session: AI Agent", metadata, research_dir=str(research_dir))
+
+            with contextlib.redirect_stdout(io.StringIO()) as output:
+                exit_code = main(
+                    [
+                        "research-export",
+                        "--query",
+                        "AI Agent",
+                        "--research-dir",
+                        str(research_dir),
+                        "--output",
+                        str(output_path),
+                        "--apply",
+                    ]
+                )
+
+            with zipfile.ZipFile(output_path) as archive:
+                names = archive.namelist()
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("Research pack exported", output.getvalue())
+        self.assertIn("manifest.json", names)
+        self.assertIn("research/session-1.md", names)
+
+    def test_research_export_id_and_query_conflict_returns_error(self) -> None:
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            exit_code = main(["research-export", "--id", "session-1", "--query", "AI Agent"])
+
+        self.assertEqual(exit_code, 1)
+        self.assertIn("Use either --id or --query, not both.", output.getvalue())
+
+    def test_research_export_without_matches_does_not_write_zip(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            output_path = Path(tmp_dir) / "pack.zip"
+
+            with contextlib.redirect_stdout(io.StringIO()) as output:
+                exit_code = main(
+                    [
+                        "research-export",
+                        "--query",
+                        "missing",
+                        "--research-dir",
+                        tmp_dir,
+                        "--output",
+                        str(output_path),
+                        "--apply",
+                    ]
+                )
+
+        self.assertEqual(exit_code, 0)
+        self.assertFalse(output_path.exists())
+        self.assertIn("No research sessions selected.", output.getvalue())
 
 
 if __name__ == "__main__":

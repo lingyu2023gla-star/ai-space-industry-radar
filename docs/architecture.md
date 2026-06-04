@@ -38,6 +38,7 @@ flowchart TD
 | `report_ingestor.py` | Markdown report 解析和 Report-to-KB 候选 items 生成 |
 | `research_collection.py` | 本地 research session 的保存、列出、查看、沉淀标记和删除 |
 | `research_index.py` | 跨 research sessions 的本地检索和 collection 统计 |
+| `research_exporter.py` | research sessions 选择、manifest 构建和 zip 研究包导出 |
 | `pipeline.py` | 工作流编排，串联 fetch / dedupe / enrich / report |
 
 ## 数据流
@@ -289,6 +290,22 @@ flowchart TD
 `research_collection.py` 负责管理单个 session，`research_index.py` 负责跨 session 的检索和统计。
 `research-search` 不调用 LLM，不修改文件；当前是轻量关键词检索，后续可以替换为
 embedding-based research index。
+
+## Research Export
+
+```mermaid
+flowchart TD
+    A[research/*.md] --> C[research_exporter.py]
+    B[research/*.json] --> C
+    D[research_index.py] --> C
+    C --> E[research-export]
+    E --> F[exports/*.zip]
+    F --> G[manifest.json / README.md / research files]
+```
+
+`research-export` 是只读归档层。它通过 query、research id、retriever、ingested 状态和日期范围
+选择 sessions，生成包含 `manifest.json`、`README.md`、Markdown 和 metadata 的 zip 包。
+该流程不修改 KB，不调用 LLM，也不修改原始 research 文件。
 
 ## 设计原则
 
