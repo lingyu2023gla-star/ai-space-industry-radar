@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Sequence
+from datetime import datetime
 from pathlib import Path
 
 from . import __version__
@@ -40,6 +41,13 @@ from .llm_client import call_deepseek_chat
 from .pipeline import run_pipeline
 from .report import DEFAULT_REPORT_PATH, write_report
 from .report_ingestor import ingest_report_file
+from .research_session import (
+    build_research_context,
+    build_research_llm_prompt,
+    generate_local_research_notes,
+    render_research_report,
+    write_research_report,
+)
 from .retrievers import EmbeddingRetriever, KeywordRetriever, SQLiteFTSRetriever
 from .run_logger import list_run_logs, read_run_log
 from .source_health import (
@@ -607,6 +615,94 @@ def ask_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def research_command(args: argparse.Namespace) -> int:
+    if args.top <= 0:
+        print("research 参数错误：--top 必须是正整数。")
+        return 1
+    if args.ingest_summary_only and args.ingest_details_only:
+        print("research 参数错误：--ingest-summary-only 和 --ingest-details-only 不能同时使用。")
+        return 1
+    items = read_items()
+    documents = build_documents_from_items(items)
+    retrievers = {
+        "keyword": KeywordRetriever,
+        "embedding": EmbeddingRetriever,
+        "fts": SQLiteFTSRetriever,
+    }
+    retriever = retrievers[args.retriever]()
+    try:
+        results = retriever.search(
+            args.query,
+            documents,
+            top_k=args.top,
+            industry=args.industry,
+            tag=args.tag,
+            company=args.company,
+            since=args.since,
+            until=args.until,
+        )
+    except ValueError as exc:
+        print(f"research 参数错误：{exc}")
+        return 1
+    except RuntimeError as exc:
+        print(f"research 检索错误：{exc}")
+        return 1
+
+    context = build_research_context(args.query, results)
+    local_notes = generate_local_research_notes(context)
+    llm_notes = None
+    if args.llm and context["evidence_count"]:
+        try:
+            llm_notes = call_deepseek_chat(
+                build_research_llm_prompt(context),
+                model=args.model,
+                response_format_json=False,
+            )
+        except ValueError as exc:
+            print(f"LLM error: {exc}")
+            return 1
+
+    markdown = render_research_report(
+        args.query,
+        local_notes,
+        llm_notes=llm_notes,
+        metadata={
+            "generated_at": datetime.now().replace(microsecond=0).isoformat(),
+            "retriever": args.retriever,
+            "top_k": args.top,
+            "llm_enabled": bool(args.llm),
+            "evidence_count": context["evidence_count"],
+        },
+    )
+
+    should_apply = args.apply and not args.dry_run
+    if should_apply:
+        output_path = write_research_report(markdown, args.output)
+        print(f"Research report generated: {output_path}")
+    else:
+        print(f"[DRY RUN] Research report would be generated: {args.output}")
+        print(markdown)
+
+    if args.ingest:
+        if not should_apply:
+            print(f"Report ingest would run for: {args.output}")
+            return 0
+        result = import_records(
+            ingest_report_file(
+                args.output,
+                include_summary_item=not args.ingest_details_only,
+                include_detail_items=not args.ingest_summary_only,
+            )
+        )
+        print("Report ingest:")
+        print(f"Imported: {result.imported}")
+        print(f"Skipped duplicates: {result.skipped_duplicates}")
+        print(f"Failed: {result.failed}")
+        for error in result.errors:
+            print(error)
+    return 0
+
+
 def print_pipeline_config(config: dict) -> None:
     for key in (
         "sources",
@@ -792,6 +888,25 @@ def build_parser() -> argparse.ArgumentParser:
         help="检索器类型，默认 keyword",
     )
     ask_parser.set_defaults(func=ask_command)
+
+    research_parser = subparsers.add_parser("research", help="围绕研究问题生成 Markdown 研究笔记")
+    research_parser.add_argument("query", help="研究问题")
+    research_parser.add_argument("--retriever", choices=("keyword", "embedding", "fts"), default="keyword", help="检索器类型，默认 keyword")
+    research_parser.add_argument("--top", type=int, default=8, help="检索证据数量，默认 8")
+    research_parser.add_argument("--industry", help="按行业筛选")
+    research_parser.add_argument("--tag", help="按标签筛选")
+    research_parser.add_argument("--company", help="按公司/机构筛选")
+    research_parser.add_argument("--since", help="只检索 date >= since 的记录，格式 YYYY-MM-DD")
+    research_parser.add_argument("--until", help="只检索 date <= until 的记录，格式 YYYY-MM-DD")
+    research_parser.add_argument("--llm", action="store_true", help="显式调用 DeepSeek 综合分析")
+    research_parser.add_argument("--model", help="覆盖默认 DeepSeek 模型")
+    research_parser.add_argument("--output", default="outputs/research_session.md", help="输出 Markdown 路径，默认 outputs/research_session.md")
+    research_parser.add_argument("--dry-run", action="store_true", help="只打印，不写文件")
+    research_parser.add_argument("--apply", action="store_true", help="写入 Markdown 文件")
+    research_parser.add_argument("--ingest", action="store_true", help="将 research report 沉淀回 KB")
+    research_parser.add_argument("--ingest-summary-only", action="store_true", help="只沉淀 research report summary item")
+    research_parser.add_argument("--ingest-details-only", action="store_true", help="只沉淀 detail items")
+    research_parser.set_defaults(func=research_command)
 
     return parser
 

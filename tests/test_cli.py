@@ -483,6 +483,124 @@ class ReportCliTest(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         write_items.assert_not_called()
 
+    def test_research_command_default_dry_run_does_not_write_output(self) -> None:
+        item = make_item(
+            item_id="1",
+            item_date="2026-06-02",
+            title="OpenAI 推进 Agent 产品化",
+            summary="Agent enterprise workflow",
+            signal="Agent 商业化加速",
+            tags="AI;Agent",
+        )
+        with TemporaryDirectory() as tmp_dir:
+            output_path = Path(tmp_dir) / "research.md"
+            with patch("industry_radar.cli.read_items", return_value=[item]):
+                with patch("industry_radar.cli.call_deepseek_chat") as llm:
+                    with contextlib.redirect_stdout(io.StringIO()) as output:
+                        exit_code = main(
+                            [
+                                "research",
+                                "Agent 商业化趋势",
+                                "--output",
+                                str(output_path),
+                            ]
+                        )
+
+            self.assertFalse(output_path.exists())
+
+        self.assertEqual(exit_code, 0)
+        llm.assert_not_called()
+        self.assertIn("Research Session", output.getvalue())
+
+    def test_research_command_apply_writes_markdown(self) -> None:
+        item = make_item(item_id="1", item_date="2026-06-02", title="OpenAI Agent", summary="Agent workflow")
+        with TemporaryDirectory() as tmp_dir:
+            output_path = Path(tmp_dir) / "research.md"
+            with patch("industry_radar.cli.read_items", return_value=[item]):
+                with contextlib.redirect_stdout(io.StringIO()):
+                    exit_code = main(
+                        [
+                            "research",
+                            "Agent trend",
+                            "--apply",
+                            "--output",
+                            str(output_path),
+                        ]
+                    )
+
+            content = output_path.read_text(encoding="utf-8")
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("Research Session", content)
+
+    def test_research_command_default_does_not_call_llm(self) -> None:
+        item = make_item(item_id="1", item_date="2026-06-02", title="OpenAI Agent", summary="Agent workflow")
+        with patch("industry_radar.cli.read_items", return_value=[item]):
+            with patch("industry_radar.cli.call_deepseek_chat") as llm:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    exit_code = main(["research", "Agent trend"])
+
+        self.assertEqual(exit_code, 0)
+        llm.assert_not_called()
+
+    def test_research_command_llm_uses_mocked_llm(self) -> None:
+        item = make_item(item_id="1", item_date="2026-06-02", title="OpenAI Agent", summary="Agent workflow")
+        with patch("industry_radar.cli.read_items", return_value=[item]):
+            with patch("industry_radar.cli.call_deepseek_chat", return_value="LLM notes") as llm:
+                with contextlib.redirect_stdout(io.StringIO()) as output:
+                    exit_code = main(["research", "Agent trend", "--llm"])
+
+        self.assertEqual(exit_code, 0)
+        llm.assert_called_once()
+        self.assertIn("LLM 综合分析", output.getvalue())
+
+    def test_research_command_ingest_dry_run_does_not_write_csv(self) -> None:
+        item = make_item(item_id="1", item_date="2026-06-02", title="OpenAI Agent", summary="Agent workflow")
+        with patch("industry_radar.cli.read_items", return_value=[item]):
+            with patch("industry_radar.cli.import_records") as import_records:
+                with contextlib.redirect_stdout(io.StringIO()) as output:
+                    exit_code = main(["research", "Agent trend", "--ingest"])
+
+        self.assertEqual(exit_code, 0)
+        import_records.assert_not_called()
+        self.assertIn("Report ingest would run", output.getvalue())
+
+    def test_research_command_apply_ingest_writes_kb(self) -> None:
+        item = make_item(item_id="1", item_date="2026-06-02", title="OpenAI Agent", summary="Agent workflow")
+        with TemporaryDirectory() as tmp_dir:
+            output_path = Path(tmp_dir) / "research.md"
+            with patch("industry_radar.cli.read_items", return_value=[item]):
+                with patch("industry_radar.cli.import_records") as import_records:
+                    import_records.return_value.imported = 1
+                    import_records.return_value.skipped_duplicates = 0
+                    import_records.return_value.failed = 0
+                    import_records.return_value.errors = []
+                    with contextlib.redirect_stdout(io.StringIO()) as output:
+                        exit_code = main(
+                            [
+                                "research",
+                                "Agent trend",
+                                "--apply",
+                                "--output",
+                                str(output_path),
+                                "--ingest",
+                            ]
+                        )
+
+        self.assertEqual(exit_code, 0)
+        import_records.assert_called_once()
+        self.assertIn("Report ingest:", output.getvalue())
+
+    def test_research_command_without_results_does_not_call_llm(self) -> None:
+        with patch("industry_radar.cli.read_items", return_value=[]):
+            with patch("industry_radar.cli.call_deepseek_chat") as llm:
+                with contextlib.redirect_stdout(io.StringIO()) as output:
+                    exit_code = main(["research", "missing", "--llm"])
+
+        self.assertEqual(exit_code, 0)
+        llm.assert_not_called()
+        self.assertIn("证据不足", output.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -470,6 +470,44 @@ python -m industry_radar pipeline \
 - 不调用 LLM，不请求网络。
 - `outputs/*.md` 是本地运行产物，已被 `.gitignore` 忽略。
 
+## Research Session
+
+`research` 用于围绕一个研究问题执行本地检索、整理证据、生成 Markdown 研究笔记，并可选调用
+DeepSeek 做综合分析。它适合把一次临时问答升级为可保存、可沉淀的研究资产。
+
+```bash
+python -m industry_radar research "AI Agent 商业化趋势"
+
+python -m industry_radar research \
+  "AI Agent 商业化趋势" \
+  --retriever fts \
+  --top 8 \
+  --apply \
+  --output outputs/agent_research.md
+
+python -m industry_radar research \
+  "商业航天数据服务机会" \
+  --industry space \
+  --retriever keyword \
+  --apply \
+  --ingest
+
+python -m industry_radar research \
+  "多智能体研究趋势" \
+  --tag arXiv \
+  --llm \
+  --apply
+```
+
+说明：
+
+- 默认只使用本地 KB，不联网，不调用 LLM。
+- 只有传入 `--llm` 才会调用 DeepSeek。
+- 默认 dry-run，不写 Markdown 文件。
+- 只有传入 `--apply` 才写入 `--output`。
+- 只有传入 `--ingest` 才会把 research report 沉淀回 KB。
+- `--ingest` 在未传 `--apply` 时只提示 would ingest，不写 CSV。
+
 ## Local Knowledge Base / ask
 
 基于本地 CSV 数据进行检索问答：

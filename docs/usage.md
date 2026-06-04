@@ -157,6 +157,17 @@ python -m industry_radar report-ingest --file outputs/top5_report.md --summary-o
 python -m industry_radar report-ingest --file outputs/top5_report.md --details-only --dry-run
 ```
 
+## research
+
+围绕一个研究问题生成 Markdown 研究笔记。
+
+```bash
+python -m industry_radar research "AI Agent 商业化趋势"
+python -m industry_radar research "AI Agent 商业化趋势" --retriever fts --top 8 --apply --output outputs/agent_research.md
+python -m industry_radar research "商业航天数据服务机会" --industry space --retriever keyword --apply --ingest
+python -m industry_radar research "多智能体研究趋势" --tag arXiv --llm --apply
+```
+
 ## pipeline
 
 执行常用工作流。

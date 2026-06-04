@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.5.0
+
+- 新增 research 命令
+- 支持基于本地检索生成 Markdown 研究笔记
+- 支持可选 DeepSeek 综合分析
+- 支持将 research report 沉淀回 KB
+
 ## v2.4.0
 
 - 新增 report-ingest 命令
