@@ -1,11 +1,17 @@
 import unittest
 import contextlib
 import io
+from types import SimpleNamespace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from industry_radar.cli import main
+from industry_radar.research_collection import (
+    create_research_metadata,
+    read_research_metadata,
+    write_research_session,
+)
 from industry_radar.retrievers import is_fts5_supported
 from industry_radar.run_logger import add_step, create_run_log, finalize_run_log, write_run_log
 from tests.test_storage import make_item
@@ -600,6 +606,138 @@ class ReportCliTest(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         llm.assert_not_called()
         self.assertIn("证据不足", output.getvalue())
+
+    def test_research_save_session_dry_run_does_not_write_files(self) -> None:
+        item = make_item(item_id="1", item_date="2026-06-02", title="OpenAI Agent", summary="Agent workflow")
+        with TemporaryDirectory() as tmp_dir:
+            with patch("industry_radar.cli.read_items", return_value=[item]):
+                with contextlib.redirect_stdout(io.StringIO()) as output:
+                    exit_code = main(
+                        [
+                            "research",
+                            "Agent trend",
+                            "--save-session",
+                            "--research-id",
+                            "session-1",
+                            "--research-dir",
+                            tmp_dir,
+                        ]
+                    )
+
+            self.assertFalse((Path(tmp_dir) / "session-1.md").exists())
+            self.assertFalse((Path(tmp_dir) / "session-1.json").exists())
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("Research session would be saved", output.getvalue())
+
+    def test_research_save_session_apply_writes_files(self) -> None:
+        item = make_item(item_id="1", item_date="2026-06-02", title="OpenAI Agent", summary="Agent workflow")
+        with TemporaryDirectory() as tmp_dir:
+            with patch("industry_radar.cli.read_items", return_value=[item]):
+                with contextlib.redirect_stdout(io.StringIO()) as output:
+                    exit_code = main(
+                        [
+                            "research",
+                            "Agent trend",
+                            "--save-session",
+                            "--research-id",
+                            "session-1",
+                            "--research-dir",
+                            tmp_dir,
+                            "--apply",
+                        ]
+                    )
+
+            self.assertTrue((Path(tmp_dir) / "session-1.md").exists())
+            self.assertTrue((Path(tmp_dir) / "session-1.json").exists())
+            metadata = read_research_metadata("session-1", research_dir=tmp_dir)
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(metadata["query"], "Agent trend")
+        self.assertIn("Research session saved", output.getvalue())
+
+    def test_research_list_lists_sessions(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            metadata = create_research_metadata("session-1", "Agent trend", "", "keyword", 5, {}, 1, False)
+            write_research_session("# Research", metadata, research_dir=tmp_dir)
+
+            with contextlib.redirect_stdout(io.StringIO()) as output:
+                exit_code = main(["research-list", "--research-dir", tmp_dir])
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("Research Sessions:", output.getvalue())
+        self.assertIn("session-1 | Agent trend", output.getvalue())
+
+    def test_research_show_displays_session(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            metadata = create_research_metadata("session-1", "Agent trend", "", "keyword", 5, {}, 1, False)
+            write_research_session("# Research Content", metadata, research_dir=tmp_dir)
+
+            with contextlib.redirect_stdout(io.StringIO()) as output:
+                exit_code = main(["research-show", "session-1", "--research-dir", tmp_dir])
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("research_id: session-1", output.getvalue())
+        self.assertIn("# Research Content", output.getvalue())
+
+    def test_research_ingest_dry_run_does_not_write_csv(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            metadata = create_research_metadata("session-1", "Agent trend", "", "keyword", 5, {}, 1, False)
+            write_research_session("# Research Content", metadata, research_dir=tmp_dir)
+
+            with patch("industry_radar.cli.import_records") as import_records:
+                with contextlib.redirect_stdout(io.StringIO()) as output:
+                    exit_code = main(["research-ingest", "session-1", "--research-dir", tmp_dir])
+
+        self.assertEqual(exit_code, 0)
+        import_records.assert_not_called()
+        self.assertIn("Research report would be ingested", output.getvalue())
+        self.assertIn("Candidates:", output.getvalue())
+
+    def test_research_ingest_apply_writes_kb_and_updates_metadata(self) -> None:
+        result = SimpleNamespace(imported=1, skipped_duplicates=0, failed=0, errors=[])
+        with TemporaryDirectory() as tmp_dir:
+            metadata = create_research_metadata("session-1", "Agent trend", "", "keyword", 5, {}, 1, False)
+            write_research_session("# Research Content", metadata, research_dir=tmp_dir)
+
+            with patch("industry_radar.cli.import_records", return_value=result) as import_records:
+                with contextlib.redirect_stdout(io.StringIO()) as output:
+                    exit_code = main(["research-ingest", "session-1", "--research-dir", tmp_dir, "--apply"])
+
+            updated = read_research_metadata("session-1", research_dir=tmp_dir)
+
+        self.assertEqual(exit_code, 0)
+        import_records.assert_called_once()
+        self.assertTrue(updated["ingested"])
+        self.assertIn("Research session marked as ingested", output.getvalue())
+
+    def test_research_delete_without_yes_does_not_delete(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            metadata = create_research_metadata("session-1", "Agent trend", "", "keyword", 5, {}, 1, False)
+            write_research_session("# Research", metadata, research_dir=tmp_dir)
+
+            with contextlib.redirect_stdout(io.StringIO()) as output:
+                exit_code = main(["research-delete", "session-1", "--research-dir", tmp_dir])
+
+            self.assertTrue((Path(tmp_dir) / "session-1.md").exists())
+            self.assertTrue((Path(tmp_dir) / "session-1.json").exists())
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("Re-run with --yes to confirm.", output.getvalue())
+
+    def test_research_delete_with_yes_deletes_session(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            metadata = create_research_metadata("session-1", "Agent trend", "", "keyword", 5, {}, 1, False)
+            write_research_session("# Research", metadata, research_dir=tmp_dir)
+
+            with contextlib.redirect_stdout(io.StringIO()) as output:
+                exit_code = main(["research-delete", "session-1", "--research-dir", tmp_dir, "--yes"])
+
+            self.assertFalse((Path(tmp_dir) / "session-1.md").exists())
+            self.assertFalse((Path(tmp_dir) / "session-1.json").exists())
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("Deleted markdown: true", output.getvalue())
 
 
 if __name__ == "__main__":

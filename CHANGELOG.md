@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.6.0
+
+- 新增 research collection 管理能力
+- research 支持 --save-session
+- 新增 research-list
+- 新增 research-show
+- 新增 research-ingest
+- 新增 research-delete
+
 ## v2.5.0
 
 - 新增 research 命令

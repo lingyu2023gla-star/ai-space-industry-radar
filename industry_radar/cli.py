@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
@@ -41,6 +42,18 @@ from .llm_client import call_deepseek_chat
 from .pipeline import run_pipeline
 from .report import DEFAULT_REPORT_PATH, write_report
 from .report_ingestor import ingest_report_file
+from .research_collection import (
+    build_research_paths,
+    create_research_metadata,
+    delete_research_session,
+    generate_research_id,
+    list_research_sessions,
+    mark_research_ingested,
+    read_research_markdown,
+    read_research_metadata,
+    resolve_research_path,
+    write_research_session,
+)
 from .research_session import (
     build_research_context,
     build_research_llm_prompt,
@@ -662,12 +675,32 @@ def research_command(args: argparse.Namespace) -> int:
             print(f"LLM error: {exc}")
             return 1
 
+    filters = {
+        "industry": args.industry,
+        "tag": args.tag,
+        "company": args.company,
+        "since": args.since,
+        "until": args.until,
+    }
+    research_id = args.research_id or generate_research_id(args.query)
+    session_paths = build_research_paths(research_id, args.research_dir)
+    session_metadata = create_research_metadata(
+        research_id,
+        args.query,
+        session_paths["markdown"],
+        args.retriever,
+        args.top,
+        filters,
+        context["evidence_count"],
+        bool(args.llm),
+    )
     markdown = render_research_report(
         args.query,
         local_notes,
         llm_notes=llm_notes,
         metadata={
             "generated_at": datetime.now().replace(microsecond=0).isoformat(),
+            "research_id": research_id if args.save_session else "",
             "retriever": args.retriever,
             "top_k": args.top,
             "llm_enabled": bool(args.llm),
@@ -683,13 +716,22 @@ def research_command(args: argparse.Namespace) -> int:
         print(f"[DRY RUN] Research report would be generated: {args.output}")
         print(markdown)
 
+    if args.save_session:
+        if should_apply:
+            paths = write_research_session(markdown, session_metadata, research_dir=args.research_dir)
+            print(f"Research session saved: {paths['markdown']}")
+            print(f"Metadata saved: {paths['metadata']}")
+        else:
+            print(f"Research session would be saved: {session_paths['markdown']}")
+
     if args.ingest:
         if not should_apply:
             print(f"Report ingest would run for: {args.output}")
             return 0
+        ingest_path = session_paths["markdown"] if args.save_session else args.output
         result = import_records(
             ingest_report_file(
-                args.output,
+                ingest_path,
                 include_summary_item=not args.ingest_details_only,
                 include_detail_items=not args.ingest_summary_only,
             )
@@ -700,7 +742,117 @@ def research_command(args: argparse.Namespace) -> int:
         print(f"Failed: {result.failed}")
         for error in result.errors:
             print(error)
+        if args.save_session and result.failed == 0:
+            mark_research_ingested(research_id, research_dir=args.research_dir)
     return 0
+
+
+def research_list_command(args: argparse.Namespace) -> int:
+    if args.limit <= 0:
+        print("research-list 参数错误：--limit 必须是正整数。")
+        return 1
+    sessions = list_research_sessions(args.research_dir, limit=args.limit)
+    if not sessions:
+        print("No research sessions found.")
+        return 0
+    print("Research Sessions:")
+    for session in sessions:
+        print(
+            f"{session.get('research_id', '')} | {session.get('query', '')} | "
+            f"evidence: {session.get('evidence_count', 0)} | "
+            f"retriever: {session.get('retriever', '')} | "
+            f"ingested: {str(session.get('ingested', False)).lower()}"
+        )
+    return 0
+
+
+def research_show_command(args: argparse.Namespace) -> int:
+    try:
+        metadata, markdown = read_research_session_parts(args.research_id_or_path, args.research_dir)
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"Research session error: {exc}")
+        return 1
+    if args.metadata_only:
+        print(json.dumps(metadata, ensure_ascii=False, indent=2))
+        return 0
+    if args.content_only:
+        print(markdown)
+        return 0
+    print(f"research_id: {metadata.get('research_id', '')}")
+    print(f"query: {metadata.get('query', '')}")
+    print(f"created_at: {metadata.get('created_at', '')}")
+    print(f"retriever: {metadata.get('retriever', '')}")
+    print(f"evidence_count: {metadata.get('evidence_count', 0)}")
+    print(f"ingested: {str(metadata.get('ingested', False)).lower()}")
+    print("")
+    print(markdown)
+    return 0
+
+
+def research_ingest_command(args: argparse.Namespace) -> int:
+    if args.summary_only and args.details_only:
+        print("research-ingest 参数错误：--summary-only 和 --details-only 不能同时使用。")
+        return 1
+    try:
+        markdown_path = resolve_research_markdown_input(args.research_id_or_path, args.research_dir)
+        candidates = ingest_report_file(
+            str(markdown_path),
+            include_summary_item=not args.details_only,
+            include_detail_items=not args.summary_only,
+        )
+    except (OSError, ValueError) as exc:
+        print(f"Research ingest error: {exc}")
+        return 1
+    should_apply = args.apply and not args.dry_run
+    if not should_apply:
+        print(f"[DRY RUN] Research report would be ingested: {markdown_path}")
+        print(f"Candidates: {len(candidates)}")
+        return 0
+    result = import_records(candidates)
+    print(f"Imported: {result.imported}")
+    print(f"Skipped duplicates: {result.skipped_duplicates}")
+    print(f"Failed: {result.failed}")
+    for error in result.errors:
+        print(error)
+    if not Path(args.research_id_or_path).exists() and result.failed == 0:
+        mark_research_ingested(args.research_id_or_path, research_dir=args.research_dir)
+        print(f"Research session marked as ingested: {args.research_id_or_path}")
+    return 0
+
+
+def research_delete_command(args: argparse.Namespace) -> int:
+    if not args.yes:
+        print(f"This will delete research session: {args.research_id}")
+        print("Re-run with --yes to confirm.")
+        return 0
+    result = delete_research_session(args.research_id, research_dir=args.research_dir)
+    print(f"Deleted markdown: {str(result['deleted_markdown']).lower()}")
+    print(f"Deleted metadata: {str(result['deleted_metadata']).lower()}")
+    return 0
+
+
+def resolve_research_markdown_input(value: str, research_dir: str) -> Path:
+    direct_path = Path(value)
+    if direct_path.exists():
+        return direct_path
+    return resolve_research_path(value, research_dir, ".md")
+
+
+def read_research_session_parts(value: str, research_dir: str) -> tuple[dict, str]:
+    direct_path = Path(value)
+    if direct_path.exists() and direct_path.suffix == ".json":
+        metadata = read_research_metadata(str(direct_path), research_dir=research_dir)
+        markdown = read_research_markdown(metadata.get("research_id", ""), research_dir=research_dir)
+        return metadata, markdown
+    if direct_path.exists() and direct_path.suffix == ".md":
+        markdown = read_research_markdown(str(direct_path), research_dir=research_dir)
+        metadata_path = direct_path.with_suffix(".json")
+        metadata = read_research_metadata(str(metadata_path), research_dir=research_dir) if metadata_path.exists() else {}
+        return metadata, markdown
+    return (
+        read_research_metadata(value, research_dir=research_dir),
+        read_research_markdown(value, research_dir=research_dir),
+    )
 
 
 def print_pipeline_config(config: dict) -> None:
@@ -906,7 +1058,38 @@ def build_parser() -> argparse.ArgumentParser:
     research_parser.add_argument("--ingest", action="store_true", help="将 research report 沉淀回 KB")
     research_parser.add_argument("--ingest-summary-only", action="store_true", help="只沉淀 research report summary item")
     research_parser.add_argument("--ingest-details-only", action="store_true", help="只沉淀 detail items")
+    research_parser.add_argument("--save-session", action="store_true", help="保存到 research collection")
+    research_parser.add_argument("--research-dir", default="research", help="research collection 目录，默认 research")
+    research_parser.add_argument("--research-id", help="指定 research session id")
     research_parser.set_defaults(func=research_command)
+
+    research_list_parser = subparsers.add_parser("research-list", help="列出 research collection sessions")
+    research_list_parser.add_argument("--research-dir", default="research", help="research collection 目录，默认 research")
+    research_list_parser.add_argument("--limit", type=int, default=20, help="展示条数，默认 20")
+    research_list_parser.set_defaults(func=research_list_command)
+
+    research_show_parser = subparsers.add_parser("research-show", help="查看 research session")
+    research_show_parser.add_argument("research_id_or_path", help="research_id 或 metadata/markdown 文件路径")
+    research_show_parser.add_argument("--research-dir", default="research", help="research collection 目录，默认 research")
+    show_group = research_show_parser.add_mutually_exclusive_group()
+    show_group.add_argument("--metadata-only", action="store_true", help="只显示 metadata")
+    show_group.add_argument("--content-only", action="store_true", help="只显示 Markdown 内容")
+    research_show_parser.set_defaults(func=research_show_command)
+
+    research_ingest_parser = subparsers.add_parser("research-ingest", help="将 research session 沉淀到 KB")
+    research_ingest_parser.add_argument("research_id_or_path", help="research_id 或 Markdown 文件路径")
+    research_ingest_parser.add_argument("--research-dir", default="research", help="research collection 目录，默认 research")
+    research_ingest_parser.add_argument("--summary-only", action="store_true", help="只沉淀 summary item")
+    research_ingest_parser.add_argument("--details-only", action="store_true", help="只沉淀 detail items")
+    research_ingest_parser.add_argument("--dry-run", action="store_true", help="只预览，不写 CSV")
+    research_ingest_parser.add_argument("--apply", action="store_true", help="写入 CSV")
+    research_ingest_parser.set_defaults(func=research_ingest_command)
+
+    research_delete_parser = subparsers.add_parser("research-delete", help="删除 research session")
+    research_delete_parser.add_argument("research_id", help="research_id")
+    research_delete_parser.add_argument("--research-dir", default="research", help="research collection 目录，默认 research")
+    research_delete_parser.add_argument("--yes", action="store_true", help="确认删除")
+    research_delete_parser.set_defaults(func=research_delete_command)
 
     return parser
 

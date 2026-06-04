@@ -239,3 +239,28 @@ python -m industry_radar ask "AI Agent 有哪些趋势？" --retriever fts
 python -m industry_radar ask "AI Agent 有哪些趋势？" --retriever fts --no-citations
 python -m industry_radar ask "AI Agent 有哪些趋势？" --retriever fts --llm --citations
 ```
+
+## research
+
+围绕一个研究问题生成 Markdown 研究笔记。默认 dry-run，不写文件；`--apply` 才写入
+`--output`。
+
+```bash
+python -m industry_radar research "AI Agent 商业化趋势"
+python -m industry_radar research "AI Agent 商业化趋势" --retriever fts --top 8 --apply --output outputs/agent_research.md
+python -m industry_radar research "商业航天数据服务机会" --industry space --apply --ingest
+python -m industry_radar research "多智能体研究趋势" --tag arXiv --llm --apply
+```
+
+## research collection
+
+保存、列出、查看、沉淀和删除本地研究会话。
+
+```bash
+python -m industry_radar research "AI Agent 商业化趋势" --retriever fts --top 8 --save-session
+python -m industry_radar research "AI Agent 商业化趋势" --save-session --apply
+python -m industry_radar research-list --limit 20
+python -m industry_radar research-show 20260603-223000-ai-agent-commercialization
+python -m industry_radar research-ingest 20260603-223000-ai-agent-commercialization --apply
+python -m industry_radar research-delete 20260603-223000-ai-agent-commercialization --yes
+```

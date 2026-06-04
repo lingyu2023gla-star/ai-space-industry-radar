@@ -508,6 +508,35 @@ python -m industry_radar research \
 - 只有传入 `--ingest` 才会把 research report 沉淀回 KB。
 - `--ingest` 在未传 `--apply` 时只提示 would ingest，不写 CSV。
 
+## Research Collection
+
+v2.6 开始，`research` 可以把研究会话按 `research_id` 保存到本地 collection，便于后续列出、
+查看、沉淀到 KB 或删除。
+
+```bash
+python -m industry_radar research \
+  "AI Agent 商业化趋势" \
+  --retriever fts \
+  --top 8 \
+  --save-session
+
+python -m industry_radar research-list
+
+python -m industry_radar research-show 20260603-223000-ai-agent-commercialization
+
+python -m industry_radar research-ingest 20260603-223000-ai-agent-commercialization --apply
+
+python -m industry_radar research-delete 20260603-223000-ai-agent-commercialization --yes
+```
+
+说明：
+
+- 不传 `--save-session` 时，`research` 不写入 research collection。
+- `--save-session` 会保存 `research/{research_id}.md` 和 `research/{research_id}.json`。
+- `research-ingest` 默认 dry-run，只有 `--apply` 才会写入 CSV。
+- `research-delete` 需要 `--yes` 才会真正删除 session。
+- `research/*.md` 和 `research/*.json` 是本地研究产物，已被 `.gitignore` 忽略。
+
 ## Local Knowledge Base / ask
 
 基于本地 CSV 数据进行检索问答：

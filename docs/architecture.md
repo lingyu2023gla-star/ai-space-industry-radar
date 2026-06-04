@@ -36,6 +36,7 @@ flowchart TD
 | `data_governance.py` | `stats` 统计、事件级 `dedupe`、重复组合并 |
 | `report.py` | Markdown 行业简报生成、排序、分布统计 |
 | `report_ingestor.py` | Markdown report 解析和 Report-to-KB 候选 items 生成 |
+| `research_collection.py` | 本地 research session 的保存、列出、查看、沉淀标记和删除 |
 | `pipeline.py` | 工作流编排，串联 fetch / dedupe / enrich / report |
 
 ## 数据流
@@ -254,6 +255,25 @@ flowchart TD
 v2.5 开始，`research` 把一次问题检索转化为可保存的 Markdown 研究资产。它默认只使用本地
 retriever，不联网、不调用 LLM；传入 `--llm` 后才使用 DeepSeek 综合分析；传入 `--ingest`
 后可以复用 report-ingest 链路把研究结果沉淀回 KB。
+
+## Research Collection
+
+```mermaid
+flowchart TD
+    A[research command] --> B[research_session.py]
+    B --> C[research_collection.py]
+    C --> D[research/{id}.md]
+    C --> E[research/{id}.json]
+    C --> F[research-list / research-show]
+    D --> G[research-ingest]
+    G --> H[report_ingestor.py]
+    H --> I[storage]
+```
+
+v2.6 开始，`research_session.py` 负责生成研究内容，`research_collection.py` 负责管理本地
+研究会话资产。每个 session 包含一份 Markdown 研究笔记和一份 JSON metadata，后续可以通过
+`research-list` / `research-show` 查看，通过 `research-ingest` 沉淀回 KB，通过
+`research-delete` 删除本地 session。
 
 ## 设计原则
 

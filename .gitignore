@@ -17,6 +17,11 @@ outputs/*.html
 runs/*.json
 !runs/.gitkeep
 
+# Research collection artifacts
+research/*.md
+research/*.json
+!research/.gitkeep
+
 # Examples are intended for GitHub display
 !examples/*.csv
 !examples/*.json
