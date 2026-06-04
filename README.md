@@ -537,6 +537,28 @@ python -m industry_radar research-delete 20260603-223000-ai-agent-commercializat
 - `research-delete` 需要 `--yes` 才会真正删除 session。
 - `research/*.md` 和 `research/*.json` 是本地研究产物，已被 `.gitignore` 忽略。
 
+## Research Collection Index
+
+v2.7 开始，可以跨 research sessions 检索历史研究主题，并查看 collection 统计。
+
+```bash
+python -m industry_radar research-search "AI Agent"
+
+python -m industry_radar research-search "商业航天 数据服务" --top 5
+
+python -m industry_radar research-search "Agent" --not-ingested
+
+python -m industry_radar research-stats
+```
+
+说明：
+
+- `research-search` 读取 `research/*.json` 和 `research/*.md`，按关键词和 metadata 进行本地检索。
+- 支持 `--retriever`、`--ingested`、`--not-ingested`、`--since`、`--until` 筛选。
+- `research-stats` 展示总 session 数、沉淀状态、retriever 分布、LLM 使用数量和证据数量均值。
+- 两个命令都不调用 LLM，不请求网络，不修改 KB。
+- `research/*.md` 和 `research/*.json` 仍然是本地产物，不提交 Git。
+
 ## Local Knowledge Base / ask
 
 基于本地 CSV 数据进行检索问答：

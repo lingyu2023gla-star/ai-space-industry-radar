@@ -54,6 +54,13 @@ from .research_collection import (
     resolve_research_path,
     write_research_session,
 )
+from .research_index import (
+    build_research_collection_stats,
+    build_research_documents,
+    build_research_search_report,
+    render_research_stats,
+    search_research_documents,
+)
 from .research_session import (
     build_research_context,
     build_research_llm_prompt,
@@ -831,6 +838,38 @@ def research_delete_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def research_search_command(args: argparse.Namespace) -> int:
+    if args.top <= 0:
+        print("research-search 参数错误：--top 必须是正整数。")
+        return 1
+    if args.ingested and args.not_ingested:
+        print("research-search 参数错误：--ingested 和 --not-ingested 不能同时使用。")
+        return 1
+    ingested = True if args.ingested else False if args.not_ingested else None
+    try:
+        documents = build_research_documents(args.research_dir)
+        results = search_research_documents(
+            args.query,
+            documents,
+            top_k=args.top,
+            retriever=args.retriever,
+            ingested=ingested,
+            since=args.since,
+            until=args.until,
+        )
+    except ValueError as exc:
+        print(f"research-search 参数错误：{exc}")
+        return 1
+    print(build_research_search_report(results, args.query))
+    return 0
+
+
+def research_stats_command(args: argparse.Namespace) -> int:
+    documents = build_research_documents(args.research_dir)
+    print(render_research_stats(build_research_collection_stats(documents)))
+    return 0
+
+
 def resolve_research_markdown_input(value: str, research_dir: str) -> Path:
     direct_path = Path(value)
     if direct_path.exists():
@@ -1090,6 +1129,22 @@ def build_parser() -> argparse.ArgumentParser:
     research_delete_parser.add_argument("--research-dir", default="research", help="research collection 目录，默认 research")
     research_delete_parser.add_argument("--yes", action="store_true", help="确认删除")
     research_delete_parser.set_defaults(func=research_delete_command)
+
+    research_search_parser = subparsers.add_parser("research-search", help="检索 research collection sessions")
+    research_search_parser.add_argument("query", help="检索关键词")
+    research_search_parser.add_argument("--research-dir", default="research", help="research collection 目录，默认 research")
+    research_search_parser.add_argument("--top", type=int, default=10, help="展示结果数量，默认 10")
+    research_search_parser.add_argument("--retriever", help="按 retriever 精确筛选")
+    ingest_filter_group = research_search_parser.add_mutually_exclusive_group()
+    ingest_filter_group.add_argument("--ingested", action="store_true", help="只显示已沉淀 sessions")
+    ingest_filter_group.add_argument("--not-ingested", action="store_true", help="只显示未沉淀 sessions")
+    research_search_parser.add_argument("--since", help="只检索 created_at 日期 >= since 的 sessions，格式 YYYY-MM-DD")
+    research_search_parser.add_argument("--until", help="只检索 created_at 日期 <= until 的 sessions，格式 YYYY-MM-DD")
+    research_search_parser.set_defaults(func=research_search_command)
+
+    research_stats_parser = subparsers.add_parser("research-stats", help="查看 research collection 统计")
+    research_stats_parser.add_argument("--research-dir", default="research", help="research collection 目录，默认 research")
+    research_stats_parser.set_defaults(func=research_stats_command)
 
     return parser
 

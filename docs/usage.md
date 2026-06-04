@@ -264,3 +264,23 @@ python -m industry_radar research-show 20260603-223000-ai-agent-commercializatio
 python -m industry_radar research-ingest 20260603-223000-ai-agent-commercialization --apply
 python -m industry_radar research-delete 20260603-223000-ai-agent-commercialization --yes
 ```
+
+## research-search
+
+按主题、关键词和 metadata 检索历史 research sessions。
+
+```bash
+python -m industry_radar research-search "AI Agent"
+python -m industry_radar research-search "商业航天 数据服务" --top 5
+python -m industry_radar research-search "Agent" --retriever fts
+python -m industry_radar research-search "Agent" --not-ingested
+python -m industry_radar research-search "AI Agent" --since 2026-01-01 --top 5
+```
+
+## research-stats
+
+查看 research collection 统计。
+
+```bash
+python -m industry_radar research-stats
+```

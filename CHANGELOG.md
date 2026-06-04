@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.7.0
+
+- 新增 research-search 命令
+- 新增 research-stats 命令
+- 支持按主题检索 research sessions
+- 支持按 retriever / ingested / date range 筛选 research sessions
+- 支持 research collection 统计
+
 ## v2.6.0
 
 - 新增 research collection 管理能力

@@ -37,6 +37,7 @@ flowchart TD
 | `report.py` | Markdown 行业简报生成、排序、分布统计 |
 | `report_ingestor.py` | Markdown report 解析和 Report-to-KB 候选 items 生成 |
 | `research_collection.py` | 本地 research session 的保存、列出、查看、沉淀标记和删除 |
+| `research_index.py` | 跨 research sessions 的本地检索和 collection 统计 |
 | `pipeline.py` | 工作流编排，串联 fetch / dedupe / enrich / report |
 
 ## 数据流
@@ -274,6 +275,20 @@ v2.6 开始，`research_session.py` 负责生成研究内容，`research_collect
 研究会话资产。每个 session 包含一份 Markdown 研究笔记和一份 JSON metadata，后续可以通过
 `research-list` / `research-show` 查看，通过 `research-ingest` 沉淀回 KB，通过
 `research-delete` 删除本地 session。
+
+## Research Collection Index
+
+```mermaid
+flowchart TD
+    A[research/{id}.json] --> C[research_index.py]
+    B[research/{id}.md] --> C
+    C --> D[research-search]
+    C --> E[research-stats]
+```
+
+`research_collection.py` 负责管理单个 session，`research_index.py` 负责跨 session 的检索和统计。
+`research-search` 不调用 LLM，不修改文件；当前是轻量关键词检索，后续可以替换为
+embedding-based research index。
 
 ## 设计原则
 

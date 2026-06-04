@@ -739,6 +739,47 @@ class ReportCliTest(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertIn("Deleted markdown: true", output.getvalue())
 
+    def test_research_search_command_runs(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            metadata = create_research_metadata("session-1", "AI Agent trend", "", "keyword", 5, {}, 1, False)
+            write_research_session("# Research Session: AI Agent\n\nAgent workflow", metadata, research_dir=tmp_dir)
+
+            with contextlib.redirect_stdout(io.StringIO()) as output:
+                exit_code = main(["research-search", "AI Agent", "--research-dir", tmp_dir])
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("Research Search Results for: AI Agent", output.getvalue())
+        self.assertIn("session-1", output.getvalue())
+
+    def test_research_stats_command_runs(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            metadata = create_research_metadata("session-1", "AI Agent trend", "", "keyword", 5, {}, 1, False)
+            write_research_session("# Research Session: AI Agent", metadata, research_dir=tmp_dir)
+
+            with contextlib.redirect_stdout(io.StringIO()) as output:
+                exit_code = main(["research-stats", "--research-dir", tmp_dir])
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("Research Collection Stats", output.getvalue())
+        self.assertIn("Total sessions: 1", output.getvalue())
+
+    def test_research_search_does_not_modify_research_files(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            metadata = create_research_metadata("session-1", "AI Agent trend", "", "keyword", 5, {}, 1, False)
+            paths = write_research_session("# Research Session: AI Agent", metadata, research_dir=tmp_dir)
+            before_metadata = Path(paths["metadata"]).read_text(encoding="utf-8")
+            before_markdown = Path(paths["markdown"]).read_text(encoding="utf-8")
+
+            with contextlib.redirect_stdout(io.StringIO()):
+                exit_code = main(["research-search", "AI Agent", "--research-dir", tmp_dir])
+
+            after_metadata = Path(paths["metadata"]).read_text(encoding="utf-8")
+            after_markdown = Path(paths["markdown"]).read_text(encoding="utf-8")
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(after_metadata, before_metadata)
+        self.assertEqual(after_markdown, before_markdown)
+
 
 if __name__ == "__main__":
     unittest.main()
