@@ -39,6 +39,7 @@ flowchart TD
 | `research_collection.py` | 本地 research session 的保存、列出、查看、沉淀标记和删除 |
 | `research_index.py` | 跨 research sessions 的本地检索和 collection 统计 |
 | `research_exporter.py` | research sessions 选择、manifest 构建和 zip 研究包导出 |
+| `research_importer.py` | research pack 检查、导入计划生成和 session 文件恢复 |
 | `pipeline.py` | 工作流编排，串联 fetch / dedupe / enrich / report |
 
 ## 数据流
@@ -306,6 +307,22 @@ flowchart TD
 `research-export` 是只读归档层。它通过 query、research id、retriever、ingested 状态和日期范围
 选择 sessions，生成包含 `manifest.json`、`README.md`、Markdown 和 metadata 的 zip 包。
 该流程不修改 KB，不调用 LLM，也不修改原始 research 文件。
+
+## Research Import
+
+```mermaid
+flowchart TD
+    A[exports/*.zip] --> B[research_importer.py]
+    B --> C[import plan]
+    B --> D[research/{id}.md]
+    B --> E[research/{id}.json]
+    D --> F[research-list / research-search / research-show]
+    E --> F
+```
+
+`research-import` 是归档恢复层。它读取 research pack 的 `manifest.json`，生成导入计划，只有传入
+`--apply` 才写入本地 research collection。导入不会自动写入 KB；如果需要沉淀到 CSV，可继续执行
+`research-ingest`。
 
 ## 设计原则
 

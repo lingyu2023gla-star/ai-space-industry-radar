@@ -295,3 +295,15 @@ python -m industry_radar research-export --query "AI Agent" --output exports/ai_
 python -m industry_radar research-export --id 20260603-223000-ai-agent-commercialization --output exports/one_session.zip --apply
 python -m industry_radar research-export --query "商业航天" --not-ingested --top 5 --apply
 ```
+
+## research-import
+
+从 research pack zip 导入 research sessions。默认 dry-run，`--apply` 才写入本地 research collection。
+
+```bash
+python -m industry_radar research-import --file exports/ai_agent_pack.zip
+python -m industry_radar research-import --file exports/ai_agent_pack.zip --apply
+python -m industry_radar research-import --file exports/ai_agent_pack.zip --overwrite --apply
+python -m industry_radar research-list
+python -m industry_radar research-search "AI Agent"
+```

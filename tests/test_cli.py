@@ -1,6 +1,7 @@
 import unittest
 import contextlib
 import io
+import json
 import zipfile
 from types import SimpleNamespace
 from pathlib import Path
@@ -863,6 +864,90 @@ class ReportCliTest(unittest.TestCase):
         self.assertFalse(output_path.exists())
         self.assertIn("No research sessions selected.", output.getvalue())
 
+    def test_research_import_dry_run_does_not_write_files(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            zip_path = create_research_pack(Path(tmp_dir) / "pack.zip")
+            research_dir = Path(tmp_dir) / "research"
+
+            with contextlib.redirect_stdout(io.StringIO()) as output:
+                exit_code = main(["research-import", "--file", str(zip_path), "--research-dir", str(research_dir)])
+
+            self.assertFalse(research_dir.exists())
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("Research Pack Import Plan", output.getvalue())
+
+    def test_research_import_apply_writes_research_files(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            zip_path = create_research_pack(Path(tmp_dir) / "pack.zip")
+            research_dir = Path(tmp_dir) / "research"
+
+            with contextlib.redirect_stdout(io.StringIO()) as output:
+                exit_code = main(
+                    [
+                        "research-import",
+                        "--file",
+                        str(zip_path),
+                        "--research-dir",
+                        str(research_dir),
+                        "--apply",
+                    ]
+                )
+
+            self.assertTrue(Path(research_dir, "session-1.md").exists())
+            self.assertTrue(Path(research_dir, "session-1.json").exists())
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("Imported: 1", output.getvalue())
+
+    def test_research_import_overwrite_apply_replaces_existing(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            zip_path = create_research_pack(Path(tmp_dir) / "pack.zip")
+            research_dir = Path(tmp_dir) / "research"
+            research_dir.mkdir()
+            Path(research_dir, "session-1.md").write_text("existing", encoding="utf-8")
+
+            with contextlib.redirect_stdout(io.StringIO()) as output:
+                exit_code = main(
+                    [
+                        "research-import",
+                        "--file",
+                        str(zip_path),
+                        "--research-dir",
+                        str(research_dir),
+                        "--overwrite",
+                        "--apply",
+                    ]
+                )
+
+            content = Path(research_dir, "session-1.md").read_text(encoding="utf-8")
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("Research Session", content)
+        self.assertIn("Overwritten: 1", output.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def create_research_pack(zip_path: Path) -> Path:
+    manifest = {
+        "export_name": "pack",
+        "created_at": "2026-06-02T10:00:00",
+        "session_count": 1,
+        "sessions": [
+            {
+                "research_id": "session-1",
+                "query": "AI Agent",
+                "metadata_path": "research/session-1.json",
+                "markdown_path": "research/session-1.md",
+            }
+        ],
+    }
+    with zipfile.ZipFile(zip_path, "w") as archive:
+        archive.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False))
+        archive.writestr("README.md", "# Research Pack")
+        archive.writestr("research/session-1.md", "# Research Session: AI Agent")
+        archive.writestr("research/session-1.json", json.dumps({"research_id": "session-1", "query": "AI Agent"}))
+    return zip_path

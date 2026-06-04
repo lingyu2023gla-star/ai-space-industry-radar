@@ -593,6 +593,36 @@ python -m industry_radar research-export \
 - 导出包包含 `manifest.json`、`README.md`、`research/*.md` 和 `research/*.json`。
 - `exports/*.zip` 是本地导出产物，已被 `.gitignore` 忽略。
 
+## Import Research Pack
+
+`research-import` 可以从 research pack zip 中恢复 research sessions 到本地 research collection。
+
+```bash
+python -m industry_radar research-import \
+  --file exports/ai_agent_pack.zip
+
+python -m industry_radar research-import \
+  --file exports/ai_agent_pack.zip \
+  --apply
+
+python -m industry_radar research-import \
+  --file exports/ai_agent_pack.zip \
+  --overwrite \
+  --apply
+
+python -m industry_radar research-list
+
+python -m industry_radar research-search "AI Agent"
+```
+
+说明：
+
+- 默认 dry-run，只展示导入计划。
+- 只有传入 `--apply` 才会写入本地 `research/*.md` 和 `research/*.json`。
+- `--overwrite` 可以覆盖同名 session。
+- 不会自动 ingest 到 KB，不会修改 CSV。
+- 导入后可以继续用 `research-list` / `research-search` / `research-show` 管理。
+
 ## Local Knowledge Base / ask
 
 基于本地 CSV 数据进行检索问答：

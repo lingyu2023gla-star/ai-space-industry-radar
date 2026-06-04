@@ -60,6 +60,7 @@ from .research_exporter import (
     select_research_sessions,
     summarize_export_result,
 )
+from .research_importer import import_research_pack, render_import_plan, summarize_import_result
 from .research_index import (
     build_research_collection_stats,
     build_research_documents,
@@ -946,6 +947,25 @@ def research_export_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def research_import_command(args: argparse.Namespace) -> int:
+    should_apply = args.apply and not args.dry_run
+    try:
+        result = import_research_pack(
+            args.file,
+            research_dir=args.research_dir,
+            overwrite=args.overwrite,
+            apply=should_apply,
+        )
+    except (FileNotFoundError, ValueError, OSError) as exc:
+        print(f"research-import error: {exc}")
+        return 1
+    if should_apply:
+        print(summarize_import_result(result))
+    else:
+        print(render_import_plan(result["plan"]))
+    return 0
+
+
 def resolve_research_markdown_input(value: str, research_dir: str) -> Path:
     direct_path = Path(value)
     if direct_path.exists():
@@ -1238,6 +1258,14 @@ def build_parser() -> argparse.ArgumentParser:
     research_export_parser.add_argument("--dry-run", action="store_true", help="只预览，不写 zip")
     research_export_parser.add_argument("--apply", action="store_true", help="实际写 zip")
     research_export_parser.set_defaults(func=research_export_command)
+
+    research_import_parser = subparsers.add_parser("research-import", help="从 research pack zip 导入 research sessions")
+    research_import_parser.add_argument("--file", required=True, help="research pack zip 路径")
+    research_import_parser.add_argument("--research-dir", default="research", help="research collection 目录，默认 research")
+    research_import_parser.add_argument("--overwrite", action="store_true", help="允许覆盖本地已有同名 session")
+    research_import_parser.add_argument("--dry-run", action="store_true", help="只展示导入计划，不写文件")
+    research_import_parser.add_argument("--apply", action="store_true", help="实际导入 research session 文件")
+    research_import_parser.set_defaults(func=research_import_command)
 
     return parser
 

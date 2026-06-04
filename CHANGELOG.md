@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.9.0
+
+- 新增 research-import 命令
+- 支持从 research pack zip 导入 research sessions
+- 支持 dry-run / apply
+- 支持 overwrite
+- export/import 形成研究包闭环
+
 ## v2.8.0
 
 - 新增 research-export 命令
